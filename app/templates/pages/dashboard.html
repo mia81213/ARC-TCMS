@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}首页 — TCMS{% endblock %}
+
+{% block content %}
+<div x-data="dashboard" x-init="load()">
+    <!-- 统计卡片 -->
+    <div class="dash-stats">
+        <div class="dash-stat">
+            <span class="dash-stat-num" x-text="stats.totalCases" style="color: #FF6B6B;">-</span>
+            <span class="dash-stat-label">测试用例</span>
+        </div>
+        <div class="dash-stat">
+            <span class="dash-stat-num" x-text="stats.totalPlans" style="color: #FF8C42;">-</span>
+            <span class="dash-stat-label">测试计划</span>
+        </div>
+        <div class="dash-stat">
+            <span class="dash-stat-num" x-text="stats.activePlans" style="color: #51CF66;">-</span>
+            <span class="dash-stat-label">进行中</span>
+        </div>
+        <div class="dash-stat">
+            <span class="dash-stat-num" x-text="stats.totalExecuted" style="color: #4DABF7;">-</span>
+            <span class="dash-stat-label">已执行</span>
+        </div>
+    </div>
+
+    <!-- 进行中的计划 -->
+    <section style="margin-top: 2.5rem;">
+        <div style="display: flex; justify-content: space-between; align-items: baseline;">
+            <h3>进行中的计划</h3>
+            <a href="/app/test-plans" class="view-all-link">查看全部 <span class="view-all-arrow">→</span></a>
+        </div>
+
+        <template x-if="activePlans.length === 0">
+            <article style="text-align: center; padding: 2rem; color: var(--pico-muted-color);">
+                <p>暂无进行中的计划</p>
+                <a href="/app/test-plans/new" role="button" class="contrast">创建计划</a>
+            </article>
+        </template>
+
+        <template x-for="p in activePlans" :key="p.id">
+            <article class="plan-card" style="cursor: pointer;" @click="window.location.href='/app/test-plans/' + p.id">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                    <strong x-text="p.name"></strong>
+                    <span class="badge status-in_progress">进行中</span>
+                </div>
+                <div class="progress-bar" style="height: 8px; margin-bottom: 0.5rem;">
+                    <div class="progress-pass" :style="{width: pct(p.summary.pass, p.summary) + '%'}" x-show="p.summary.pass > 0"></div>
+                    <div class="progress-fail" :style="{width: pct(p.summary.fail, p.summary) + '%'}" x-show="p.summary.fail > 0"></div>
+                    <div class="progress-na" :style="{width: pct(p.summary.na, p.summary) + '%'}" x-show="p.summary.na > 0"></div>
+                    <div class="progress-nt" :style="{width: pct(p.summary.nt, p.summary) + '%'}" x-show="p.summary.nt > 0"></div>
+                    <div class="progress-untested" :style="{width: pct(p.summary.untested, p.summary) + '%'}"></div>
+                </div>
+                <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;" @click.stop>
+                    <a :href="'/app/test-plans/' + p.id + '?filter=pass'" class="result-chip pass">Pass <strong x-text="p.summary.pass"></strong></a>
+                    <a :href="'/app/test-plans/' + p.id + '?filter=fail'" class="result-chip fail">Fail <strong x-text="p.summary.fail"></strong></a>
+                    <a :href="'/app/test-plans/' + p.id + '?filter=nt'" class="result-chip nt">NT <strong x-text="p.summary.nt"></strong></a>
+                    <a :href="'/app/test-plans/' + p.id + '?filter=na'" class="result-chip na">NA <strong x-text="p.summary.na"></strong></a>
+                    <a :href="'/app/test-plans/' + p.id + '?filter=untested'" class="result-chip untested">未测 <strong x-text="p.summary.untested"></strong></a>
+                </div>
+            </article>
+        </template>
+    </section>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('alpine:init', () => {
+    Alpine.data('dashboard', () => ({
+        stats: { totalCases: 0, totalPlans: 0, activePlans: 0, totalExecuted: 0 },
+        activePlans: [],
+
+        async load() {
+            try {
+                const [caseResp, planResp] = await Promise.all([
+                    fetch('/api/test-cases?per_page=1'),
+                    fetch('/api/test-plans'),
+                ]);
+                const cases = await caseResp.json();
+                const plans = await planResp.json();
+
+                this.stats.totalCases = cases.meta?.total || 0;
+                this.stats.totalPlans = (plans.data || []).length;
+
+                let activeCount = 0, totalExec = 0;
+                const active = [];
+                for (const p of (plans.data || [])) {
+                    if (p.status === 'in_progress') { activeCount++; active.push(p); }
+                    const s = p.summary || {};
+                    totalExec += (s.pass || 0) + (s.fail || 0) + (s.nt || 0) + (s.na || 0);
+                }
+                this.stats.activePlans = activeCount;
+                this.stats.totalExecuted = totalExec;
+                this.activePlans = active.slice(0, 10);
+            } catch (e) { console.error(e); }
+        },
+
+        pct(count, summary) {
+            const total = (summary?.pass || 0) + (summary?.fail || 0) + (summary?.nt || 0) + (summary?.na || 0) + (summary?.untested || 0);
+            return total > 0 ? Math.round(count / total * 100) : 0;
+        },
+
+        summaryText(s) {
+            if (!s) return '';
+            const total = (s.pass || 0) + (s.fail || 0) + (s.nt || 0) + (s.na || 0) + (s.untested || 0);
+            return `Pass ${s.pass || 0} · Fail ${s.fail || 0} · NT ${s.nt || 0} · NA ${s.na || 0} · 未测 ${s.untested || 0}`;
+        },
+    }));
+});
+</script>
+{% endblock %}

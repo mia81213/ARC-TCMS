@@ -1,0 +1,223 @@
+{% extends "base.html" %}
+{% block title %}{% if is_new %}创建用例{% else %}编辑用例{% endif %} — 测试用例管理系统{% endblock %}
+
+{% block content %}
+<div x-data="caseForm">
+    <nav>
+        <ul><li><a href="/app/test-cases">&larr; 返回列表</a></li></ul>
+    </nav>
+    <h1>{% if is_new %}创建测试用例{% else %}编辑测试用例{% endif %}</h1>
+
+    <form @submit.prevent="submitForm">
+        <div class="grid">
+            <label>
+                标题 <span style="color: red;">*</span>
+                <input type="text" x-model="form.title" required maxlength="255" placeholder="请输入用例标题">
+            </label>
+        </div>
+
+        <div class="grid">
+            <label>
+                所属模块 <span style="color: red;">*</span>
+                <div style="display: flex; gap: 0.5rem;">
+                    <input type="text" x-model="form.module" list="module-list" required placeholder="输入或选择模块" style="flex:1;">
+                    <datalist id="module-list">
+                        {% for m in modules %}
+                        <option value="{{ m }}"></option>
+                        {% endfor %}
+                    </datalist>
+                </div>
+            </label>
+            <label>
+                优先级
+                <select x-model="form.priority">
+                    <option value="P0">P0 — 最高</option>
+                    <option value="P1">P1 — 高</option>
+                    <option value="P2" selected>P2 — 中</option>
+                    <option value="P3">P3 — 低</option>
+                </select>
+            </label>
+            <label>
+                状态
+                <select x-model="form.status">
+                    <option value="draft">草稿</option>
+                    <option value="active">启用</option>
+                    <option value="deprecated">废弃</option>
+                </select>
+            </label>
+        </div>
+
+        <label>
+            前置条件
+            <textarea x-model="form.precondition" rows="2" placeholder="输入前置条件（可选）"></textarea>
+        </label>
+
+        <!-- 测试步骤编辑器 -->
+        <fieldset>
+            <legend>测试步骤 <button type="button" @click="addStep()" class="small">+ 添加步骤</button></legend>
+            <template x-if="form.steps.length === 0">
+                <p style="color: var(--pico-muted-color);">暂无步骤，点击「添加步骤」开始。</p>
+            </template>
+            <template x-for="(step, idx) in form.steps" :key="step._key || idx">
+                <div class="step-row" style="margin-bottom: 1rem; padding: 0.75rem; border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                        <strong x-text="'步骤 ' + (idx + 1)"></strong>
+                        <div>
+                            <button type="button" class="small secondary" @click="moveStep(idx, -1)" :disabled="idx === 0">&uarr;</button>
+                            <button type="button" class="small secondary" @click="moveStep(idx, 1)" :disabled="idx === form.steps.length - 1">&darr;</button>
+                            <button type="button" class="small secondary" @click="removeStep(idx)" style="color: var(--pico-del-color);">删除</button>
+                        </div>
+                    </div>
+                    <div class="grid">
+                        <label>
+                            操作描述
+                            <textarea x-model="step.action" rows="2" placeholder="描述操作步骤"></textarea>
+                        </label>
+                        <label>
+                            预期结果
+                            <textarea x-model="step.expected" rows="2" placeholder="描述预期结果"></textarea>
+                        </label>
+                    </div>
+                </div>
+            </template>
+        </fieldset>
+
+        <!-- 标签 -->
+        <label>
+            标签
+            <div style="display: flex; gap: 0.5rem; align-items: center;">
+                <input type="text" x-model="tagInput" @keydown.enter.prevent="addTag()" placeholder="输入标签后按回车添加" style="flex:1;">
+            </div>
+            <div style="margin-top: 0.5rem; display: flex; gap: 0.25rem; flex-wrap: wrap;">
+                <template x-for="(tag, idx) in form.tags" :key="tag">
+                    <span class="tag-chip">
+                        <span x-text="tag"></span>
+                        <button type="button" @click="form.tags.splice(idx, 1)" class="small" style="padding: 0 0.25rem; margin: 0;">&times;</button>
+                    </span>
+                </template>
+            </div>
+        </label>
+
+        <div class="grid" style="margin-top: 2rem;">
+            <a href="/app/test-cases" role="button" class="secondary">取消</a>
+            <button type="submit" class="contrast" :disabled="saving">
+                <span x-show="!saving">{% if is_new %}创建{% else %}保存{% endif %}</span>
+                <span x-show="saving">保存中...</span>
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('alpine:init', () => {
+    Alpine.data('caseForm', () => ({
+        form: {
+            title: '',
+            module: '',
+            priority: 'P2',
+            status: 'draft',
+            precondition: '',
+            steps: [],
+            tags: [],
+        },
+        tagInput: '',
+        saving: false,
+        {% if case %}
+        isEdit: true,
+        caseId: {{ case.id }},
+        {% else %}
+        isEdit: false,
+        caseId: null,
+        {% endif %}
+
+        init() {
+            {% if case %}
+            // 加载已有数据
+            this.form.title = {{ case.title | tojson }};
+            this.form.module = {{ case.module | tojson }};
+            this.form.priority = {{ case.priority.value | tojson }};
+            this.form.status = {{ case.status.value | tojson }};
+            this.form.precondition = {{ (case.precondition or '') | tojson }};
+            this.form.steps = ({{ case.steps | tojson }} || []).map((s, i) => ({...s, _key: Date.now() + i}));
+            this.form.tags = {{ (case.tags or []) | tojson }};
+            {% endif %}
+        },
+
+        addStep() {
+            this.form.steps.push({
+                _key: Date.now() + Math.random(),
+                seq: this.form.steps.length + 1,
+                action: '',
+                expected: '',
+            });
+            this.reindex();
+        },
+
+        removeStep(idx) {
+            this.form.steps.splice(idx, 1);
+            this.reindex();
+        },
+
+        moveStep(idx, dir) {
+            const newIdx = idx + dir;
+            if (newIdx < 0 || newIdx >= this.form.steps.length) return;
+            const tmp = this.form.steps[idx];
+            this.form.steps[idx] = this.form.steps[newIdx];
+            this.form.steps[newIdx] = tmp;
+            this.reindex();
+        },
+
+        reindex() {
+            this.form.steps.forEach((s, i) => s.seq = i + 1);
+        },
+
+        addTag() {
+            const tag = this.tagInput.trim();
+            if (tag && !this.form.tags.includes(tag)) {
+                this.form.tags.push(tag);
+            }
+            this.tagInput = '';
+        },
+
+        async submitForm() {
+            if (!this.form.title.trim() || !this.form.module.trim()) {
+                showToast('标题和模块不能为空', 'error');
+                return;
+            }
+
+            this.saving = true;
+            const payload = {
+                ...this.form,
+                steps: this.form.steps.map(({_key, ...s}) => s),  // 去除 _key
+            };
+
+            try {
+                const url = this.isEdit
+                    ? '/api/test-cases/' + this.caseId
+                    : '/api/test-cases';
+                const method = this.isEdit ? 'PUT' : 'POST';
+                const resp = await fetch(url, {
+                    method,
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                });
+
+                if (resp.ok) {
+                    showToast(this.isEdit ? '保存成功' : '创建成功', 'success');
+                    setTimeout(() => { window.location.href = '/app/test-cases'; }, 500);
+                } else {
+                    const err = await resp.json();
+                    showToast('操作失败: ' + (err.detail || '未知错误'), 'error');
+                }
+            } catch (e) {
+                showToast('操作失败: ' + e.message, 'error');
+            } finally {
+                this.saving = false;
+            }
+        },
+    }));
+});
+</script>
+{% endblock %}

@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}测试计划 — 测试用例管理系统{% endblock %}
+
+{% block content %}
+<div x-data="testPlanList">
+    <hgroup>
+        <h1>测试计划</h1>
+    </hgroup>
+
+    <a href="/app/test-plans/new" role="button" class="contrast">+ 新建计划</a>
+
+    <div class="overflow-auto" style="margin-top: 1rem;">
+        <table class="striped">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>名称</th>
+                    <th>描述</th>
+                    <th>状态</th>
+                    <th>进度</th>
+                    <th>更新时间</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                <template x-if="loading">
+                    <tr><td colspan="7" style="text-align: center;">加载中...</td></tr>
+                </template>
+                <template x-if="!loading && plans.length === 0">
+                    <tr><td colspan="7" style="text-align: center;">暂无测试计划</td></tr>
+                </template>
+                <template x-for="p in plans" :key="p.id">
+                    <tr>
+                        <td x-text="p.id"></td>
+                        <td><a :href="'/app/test-plans/' + p.id" x-text="p.name"></a></td>
+                        <td x-text="truncate(p.description, 50)"></td>
+                        <td><span :class="'badge status-' + p.status" x-text="planStatusLabel(p.status)"></span></td>
+                        <td>
+                            <div class="progress-bar" style="height: 20px;">
+                                <div class="progress-pass" :style="{width: percent(p.summary.pass, p.summary) + '%'}" x-show="p.summary.pass > 0" x-text="p.summary.pass || ''"></div>
+                                <div class="progress-fail" :style="{width: percent(p.summary.fail, p.summary) + '%'}" x-show="p.summary.fail > 0" x-text="p.summary.fail || ''"></div>
+                                <div class="progress-nt" :style="{width: percent(p.summary.nt, p.summary) + '%'}" x-show="p.summary.nt > 0" x-text="p.summary.nt || ''"></div>
+                                <div class="progress-na" :style="{width: percent(p.summary.na, p.summary) + '%'}" x-show="p.summary.na > 0" x-text="p.summary.na || ''"></div>
+                                <div class="progress-untested" :style="{width: percent(p.summary.untested, p.summary) + '%'}" x-show="p.summary.untested > 0"></div>
+                            </div>
+                            <small x-text="summaryText(p.summary)"></small>
+                        </td>
+                        <td x-text="formatDate(p.updated_at)"></td>
+                        <td>
+                            <a :href="'/app/test-plans/' + p.id + '/edit'" role="button" class="small">编辑</a>
+                            <button class="small secondary" @click="confirmDelete(p.id, p.name)">删除</button>
+                        </td>
+                    </tr>
+                </template>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- 删除确认对话框 -->
+    <dialog x-ref="deleteDialog">
+        <article>
+            <header>确认删除</header>
+            <p>确定要删除计划「<strong x-text="deletingName"></strong>」吗？关联的执行结果也会被删除。</p>
+            <footer>
+                <button class="secondary" @click="$refs.deleteDialog.close()">取消</button>
+                <button class="contrast" @click="doDelete()">确认删除</button>
+            </footer>
+        </article>
+    </dialog>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('alpine:init', () => {
+    Alpine.data('testPlanList', () => ({
+        plans: [],
+        loading: false,
+        deletingId: null,
+        deletingName: '',
+
+        async init() { await this.fetchPlans(); },
+
+        async fetchPlans() {
+            this.loading = true;
+            try {
+                const resp = await fetch('/api/test-plans');
+                const data = await resp.json();
+                this.plans = data.data || [];
+            } catch (e) {
+                showToast('加载失败', 'error');
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        confirmDelete(id, name) {
+            this.deletingId = id;
+            this.deletingName = name;
+            this.$refs.deleteDialog.showModal();
+        },
+
+        async doDelete() {
+            try {
+                const resp = await fetch('/api/test-plans/' + this.deletingId, { method: 'DELETE' });
+                if (resp.ok) {
+                    showToast('删除成功', 'success');
+                    this.$refs.deleteDialog.close();
+                    await this.fetchPlans();
+                }
+            } catch (e) { showToast('删除失败', 'error'); }
+        },
+
+        percent(count, summary) {
+            const total = summary.pass + summary.fail + summary.nt + summary.na + summary.untested;
+            return total > 0 ? Math.round(count / total * 100) : 0;
+        },
+
+        summaryText(s) {
+            const total = s.pass + s.fail + s.nt + s.na + s.untested;
+            return `Pass:${s.pass} Fail:${s.fail} NT:${s.nt} NA:${s.na} 未测:${s.untested} (共${total})`;
+        },
+
+        planStatusLabel(s) {
+            const map = { draft: '草稿', in_progress: '进行中', completed: '已完成', archived: '已归档' };
+            return map[s] || s;
+        },
+
+        truncate(text, max) {
+            if (!text) return '';
+            return text.length > max ? text.substring(0, max) + '...' : text;
+        },
+
+        formatDate(d) { return d ? new Date(d).toLocaleString('zh-CN') : ''; },
+    }));
+});
+</script>
+{% endblock %}

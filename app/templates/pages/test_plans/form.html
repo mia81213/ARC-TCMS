@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+{% block title %}创建测试计划 — 测试用例管理系统{% endblock %}
+
+{% block content %}
+<div x-data="planForm" x-init="loadCategories()">
+    <nav>
+        <ul><li><a href="/app/test-plans">&larr; 返回列表</a></li></ul>
+    </nav>
+    <h1>创建测试计划</h1>
+
+    <p style="color: var(--pico-muted-color);">选择用例类别（可多选），每类将创建一个独立的测试计划。</p>
+
+    <!-- 多选卡片 -->
+    <div class="grid" style="margin-top: 1.5rem;">
+        <template x-for="cat in categories" :key="cat">
+            <article
+                style="cursor: pointer; transition: outline 0.15s;"
+                :style="selected.includes(cat) ? 'outline: 2px solid var(--pico-primary);' : 'outline: 2px solid transparent;'"
+                @click="toggle(cat)"
+            >
+                <header>
+                    <input type="checkbox" :checked="selected.includes(cat)" @click.stop="toggle(cat)" style="margin-right: 0.5rem;">
+                    <strong x-text="cat + '测试'"></strong>
+                    <small x-text="'(' + catCounts[cat] + ' 条用例)'"></small>
+                </header>
+                <p style="font-size: 0.85em; color: var(--pico-muted-color);">
+                    包含模块：
+                    <template x-for="m in catModules[cat]" :key="m">
+                        <kbd x-text="m.replace(cat + ' - ', '')" style="margin-right: 4px;"></kbd>
+                    </template>
+                </p>
+            </article>
+        </template>
+        <template x-if="categories.length === 0">
+            <p style="color: var(--pico-muted-color);">暂无用例，请先导入用例数据。</p>
+        </template>
+    </div>
+
+    <!-- 操作按钮 -->
+    <div style="margin-top: 2rem;" x-show="categories.length > 0">
+        <div class="grid">
+            <a href="/app/test-plans" role="button" class="secondary">取消</a>
+            <button class="contrast" @click="createPlan()" :disabled="selected.length === 0 || saving">
+                <span x-show="!saving">创建 <span x-text="selected.length"></span> 个计划</span>
+                <span x-show="saving">创建中...</span>
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('alpine:init', () => {
+    Alpine.data('planForm', () => ({
+        categories: [],
+        catModules: {},
+        catCounts: {},
+        selected: [],       // 多选数组
+        saving: false,
+
+        async loadCategories() {
+            try {
+                const resp = await fetch('/api/test-cases/modules');
+                const data = await resp.json();
+                const modules = data.data || [];
+
+                const topSet = new Set();
+                for (const m of modules) {
+                    const parts = m.split(' - ');
+                    if (parts.length >= 2) {
+                        const top = parts[0];
+                        topSet.add(top);
+                        if (!this.catModules[top]) this.catModules[top] = [];
+                        this.catModules[top].push(m);
+                    }
+                }
+
+                this.categories = [...topSet].sort();
+
+                for (const cat of this.categories) {
+                    let count = 0;
+                    for (const m of this.catModules[cat]) {
+                        const r = await fetch(`/api/test-cases?per_page=1&module=${encodeURIComponent(m)}`);
+                        const d = await r.json();
+                        count += d.meta?.total || 0;
+                    }
+                    this.catCounts[cat] = count;
+                }
+            } catch (e) {
+                console.error('加载类别失败:', e);
+            }
+        },
+
+        toggle(cat) {
+            const idx = this.selected.indexOf(cat);
+            if (idx >= 0) {
+                this.selected.splice(idx, 1);
+            } else {
+                this.selected.push(cat);
+            }
+        },
+
+        async createPlan() {
+            if (this.selected.length === 0) return;
+            this.saving = true;
+            let created = 0;
+            try {
+                for (const cat of this.selected) {
+                    const planName = cat + '测试';
+
+                    // 1. 创建计划
+                    const resp = await fetch('/api/test-plans', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ name: planName, description: '', status: 'in_progress' }),
+                    });
+                    if (!resp.ok) continue;
+                    const planData = await resp.json();
+                    const planId = planData.data.id;
+
+                    // 2. 收集用例 ID
+                    let caseIds = [];
+                    for (const m of this.catModules[cat]) {
+                        const r = await fetch(`/api/test-cases?per_page=100&module=${encodeURIComponent(m)}`);
+                        const d = await r.json();
+                        for (const c of (d.data || [])) {
+                            caseIds.push(c.id);
+                        }
+                    }
+
+                    // 3. 加入计划
+                    if (caseIds.length > 0) {
+                        await fetch(`/api/test-plans/${planId}/items`, {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ test_case_ids: caseIds }),
+                        });
+                    }
+                    created++;
+                }
+
+                showToast(`创建成功！共 ${created} 个计划`, 'success');
+                setTimeout(() => { window.location.href = '/app/test-plans'; }, 800);
+            } catch (e) {
+                showToast('操作失败: ' + e.message, 'error');
+            } finally {
+                this.saving = false;
+            }
+        },
+    }));
+});
+</script>
+{% endblock %}

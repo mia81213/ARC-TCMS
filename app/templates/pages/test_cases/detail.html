@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+{% block title %}{{ case.title }} — 测试用例管理系统{% endblock %}
+
+{% block content %}
+<div x-data="caseDetail" x-init="init({{ case.id }})">
+    <nav>
+        <ul>
+            <li x-cloak x-show="!planId"><a href="/app/test-cases">&larr; 返回列表</a></li>
+            <li x-show="planId"><a :href="'/app/test-plans/' + planId">&larr; 返回计划</a></li>
+        </ul>
+    </nav>
+
+    <article>
+        <header>
+            <h1>{{ case.title }}</h1>
+        </header>
+
+        {% if case.precondition %}
+        <section>
+            <h3>前置条件</h3>
+            <pre style="white-space: pre-wrap;">{{ case.precondition }}</pre>
+        </section>
+        {% endif %}
+
+        <section>
+            <h3>测试步骤</h3>
+            {% if case.steps %}
+            <table>
+                <thead><tr><th style="width: 50px;">序号</th><th>操作描述</th><th>预期结果</th></tr></thead>
+                <tbody>
+                    {% for step in case.steps %}
+                    <tr>
+                        <td>{{ step.seq }}</td>
+                        <td style="white-space: pre-wrap;">{{ step.action }}</td>
+                        <td style="white-space: pre-wrap;">{{ step.expected }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p style="color: var(--pico-muted-color);">暂无步骤</p>
+            {% endif %}
+        </section>
+
+        <!-- 执行结果（仅在计划上下文中显示） -->
+        <section x-show="planId" style="margin-top: 1.5rem; padding-top: 1rem; border-top: 2px solid var(--pico-muted-border-color);">
+            <h3>执行结果</h3>
+
+            <div class="exec-actions" style="margin-top: 0.8rem;">
+                <button class="exec-btn pass" @click="submitResult('pass')" :disabled="submitting">
+                    <span class="exec-btn-icon">✓</span> Pass
+                </button>
+                <button class="exec-btn fail" @click="submitResult('fail')" :disabled="submitting">
+                    <span class="exec-btn-icon">✗</span> Fail
+                </button>
+                <button class="exec-btn nt" @click="submitResult('nt')" :disabled="submitting">
+                    <span class="exec-btn-icon">—</span> NT
+                </button>
+                <button class="exec-btn na" @click="submitResult('na')" :disabled="submitting">
+                    <span class="exec-btn-icon">○</span> NA
+                </button>
+            </div>
+
+            <!-- 上一条 / 下一条 -->
+            <div class="exec-nav" x-show="planId && planItems.length > 1" style="margin-top: 1.5rem;">
+                <button class="exec-nav-btn" @click="goTo(currentIdx - 1)" :disabled="currentIdx === 0">
+                    ← 上一条
+                </button>
+                <button class="exec-nav-btn next" @click="goTo(currentIdx + 1)" :disabled="currentIdx >= planItems.length - 1">
+                    下一条 →
+                </button>
+            </div>
+        </section>
+
+        {% if case.created_at or case.updated_at %}
+        <footer style="margin-top: 1.5rem;">
+            <small>
+                创建时间：{{ case.created_at.strftime('%Y-%m-%d %H:%M') if case.created_at else '' }}
+                &nbsp;|&nbsp;
+                更新时间：{{ case.updated_at.strftime('%Y-%m-%d %H:%M') if case.updated_at else '' }}
+            </small>
+        </footer>
+        {% endif %}
+    </article>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('alpine:init', () => {
+    Alpine.data('caseDetail', () => ({
+        planId: null,
+        planItemId: null,
+        planItems: [],
+        currentIdx: 0,
+        currentStatus: null,
+        submitting: false,
+
+        init(caseId) {
+            const params = new URLSearchParams(window.location.search);
+            this.planId = params.get('plan_id');
+            if (this.planId) {
+                this.loadPlanItem(this.planId, caseId);
+            }
+        },
+
+        async loadPlanItem(planId, caseId) {
+            try {
+                const resp = await fetch('/api/test-plans/' + planId + '/items');
+                const data = await resp.json();
+                this.planItems = data.data || [];
+                const idx = this.planItems.findIndex(i => i.test_case_id === caseId);
+                if (idx >= 0) {
+                    this.currentIdx = idx;
+                    const item = this.planItems[idx];
+                    this.planItemId = item.id;
+                    this.currentStatus = item.execution_status || null;
+                }
+            } catch (e) { console.error(e); }
+        },
+
+        goTo(idx) {
+            if (idx < 0 || idx >= this.planItems.length) return;
+            const item = this.planItems[idx];
+            window.location.href = '/app/test-cases/' + item.test_case_id + '?plan_id=' + this.planId;
+        },
+
+        async submitResult(status) {
+            if (this.submitting || !this.planItemId) return;
+            this.submitting = true;
+            try {
+                const resp = await fetch('/api/test-plans/' + this.planId + '/items/' + this.planItemId, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        execution_status: status,
+                    }),
+                });
+                if (resp.ok) {
+                    this.currentStatus = status;
+                }
+            } catch (e) {
+                showToast('保存失败', 'error');
+            } finally {
+                this.submitting = false;
+            }
+        },
+    }));
+});
+</script>
+{% endblock %}

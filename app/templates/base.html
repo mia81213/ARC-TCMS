@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>{% block title %}测试用例管理系统{% endblock %}</title>
+    <!-- PicoCSS (本地) -->
+    <link rel="stylesheet" href="/static/css/pico.min.css">
+    <!-- Alpine.js (本地) -->
+    <script defer src="/static/js/alpine.min.js"></script>
+    <!-- 自定义样式 -->
+    <link rel="stylesheet" href="/static/css/app.css">
+    {% block head %}{% endblock %}
+</head>
+<body>
+    {% block header %}
+    <header class="container-fluid top-nav">
+        <nav>
+            <ul>
+                <li><a href="/app/" class="contrast"><strong>TCMS</strong></a></li>
+            </ul>
+            <ul class="desktop-nav">
+                <li><a href="/app/">首页</a></li>
+                <li><a href="/app/test-cases">用例管理</a></li>
+                <li><a href="/app/test-plans">测试计划</a></li>
+                <li><a href="/app/import-export">导入导出</a></li>
+            </ul>
+        </nav>
+    </header>
+    {% endblock %}
+
+    <main class="container" style="padding-top: var(--pico-spacing); padding-bottom: 5rem;">
+        <!-- Toast 通知容器 -->
+        <div id="toast-container" x-data="toast" @show-toast.window="show($event.detail)" style="position: fixed; top: 1rem; right: 1rem; z-index: 9999;">
+            <template x-for="t in toasts" :key="t.id">
+                <article :class="'toast toast-' + t.type" x-show="t.show" x-transition>
+                    <span x-text="t.message"></span>
+                    <button @click="dismiss(t.id)" style="margin-left: 1rem;">&times;</button>
+                </article>
+            </template>
+        </div>
+
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- 手机底部导航栏 -->
+    {% block mobile_nav %}
+    <nav class="mobile-bottom-nav">
+        <a href="/app/" class="{% if request.url.path == '/app/' %}active{% endif %}">
+            <span class="nav-icon">🏠</span>
+            <span class="nav-label">首页</span>
+        </a>
+        <a href="/app/test-cases" class="{% if '/test-cases' in request.url.path %}active{% endif %}">
+            <span class="nav-icon">📋</span>
+            <span class="nav-label">用例</span>
+        </a>
+        <a href="/app/test-plans" class="{% if '/test-plans' in request.url.path %}active{% endif %}">
+            <span class="nav-icon">📝</span>
+            <span class="nav-label">计划</span>
+        </a>
+        <a href="/app/import-export" class="{% if '/import-export' in request.url.path %}active{% endif %}">
+            <span class="nav-icon">📤</span>
+            <span class="nav-label">导出</span>
+        </a>
+    </nav>
+    {% endblock %}
+
+    {% block footer %}
+    <footer class="container-fluid desktop-footer">
+        <small>TCMS — 测试用例管理系统 v0.1.0</small>
+    </footer>
+    {% endblock %}
+
+    <script>
+    // Toast 通知组件
+    document.addEventListener('alpine:init', () => {
+        Alpine.data('toast', () => ({
+            toasts: [],
+            nextId: 0,
+            show(detail) {
+                const id = this.nextId++;
+                this.toasts.push({ id, message: detail.message, type: detail.type || 'info', show: true });
+                setTimeout(() => this.dismiss(id), 3000);
+            },
+            dismiss(id) {
+                const t = this.toasts.find(t => t.id === id);
+                if (t) t.show = false;
+                setTimeout(() => { this.toasts = this.toasts.filter(t => t.id !== id); }, 300);
+            }
+        }));
+    });
+
+    function showToast(message, type = 'info') {
+        window.dispatchEvent(new CustomEvent('show-toast', { detail: { message, type } }));
+    }
+    </script>
+    {% block scripts %}{% endblock %}
+</body>
+</html>

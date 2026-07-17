@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}{{ plan.name }} — 测试用例管理系统{% endblock %}
+
+{% block content %}
+<div x-data="planDetail" x-init="init({{ plan.id }})">
+    <nav>
+        <ul><li><a href="/app/">&larr; 返回首页</a></li></ul>
+    </nav>
+
+    <article>
+        <header>
+            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+                <h1 x-text="plan.name" style="margin-bottom: 0;"></h1>
+                <a :href="'/app/test-plans/' + planId + '/execute'" class="btn-start-test">▶ 开始测试</a>
+            </div>
+        </header>
+
+        <!-- 筛选提示 -->
+        <div x-show="activeFilter" style="display: flex; gap: 0.5rem; align-items: center; margin-bottom: 0.5rem;">
+            <span style="font-size: 0.85rem; color: var(--pico-muted-color);">
+                筛选：<strong x-text="filterLabel(activeFilter)"></strong>（<span x-text="filteredItems.length"></span> 条）
+            </span>
+            <a :href="'/app/test-plans/' + planId" role="button" class="small secondary">清除筛选</a>
+        </div>
+
+        <!-- 用例列表 -->
+        <section>
+            <h3>用例列表</h3>
+
+            <template x-if="loading">
+                <p>加载中...</p>
+            </template>
+            <template x-if="!loading && items.length === 0">
+                <p style="color: var(--pico-muted-color);">暂无关联用例</p>
+            </template>
+
+            <div class="overflow-auto" x-show="items.length > 0">
+                <table class="striped">
+                    <thead>
+                        <tr>
+                            <th>用例号</th>
+                            <th>执行结果</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <template x-for="item in filteredItems" :key="item.id">
+                            <tr>
+                                <td><a :href="'/app/test-cases/' + item.test_case_id + '?plan_id=' + planId" x-text="item.test_case?.title?.match(/\[([^\]]+)\]/)?.[1] || item.test_case_id"></a></td>
+                                <td><span :class="'badge exec-' + (item.execution_status || 'none')" x-text="item.execution_status || '未执行'"></span></td>
+                            </tr>
+                        </template>
+                    </tbody>
+                </table>
+            </div>
+        </section>
+    </article>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('alpine:init', () => {
+    Alpine.data('planDetail', () => ({
+        planId: 0,
+        plan: { name: '', description: '', status: 'draft' },
+        summary: { pass: 0, fail: 0, nt: 0, na: 0, untested: 0 },
+        items: [],
+        activeFilter: '',
+        loading: false,
+
+        async init(planId) {
+            this.planId = planId;
+            this.activeFilter = new URLSearchParams(window.location.search).get('filter') || '';
+            await this.loadPlan();
+            await this.loadItems();
+        },
+
+        get filteredItems() {
+            if (!this.activeFilter) return this.items;
+            if (this.activeFilter === 'untested') return this.items.filter(i => !i.execution_status);
+            return this.items.filter(i => i.execution_status === this.activeFilter);
+        },
+
+        async loadPlan() {
+            try {
+                const resp = await fetch('/api/test-plans/' + this.planId);
+                const data = await resp.json();
+                this.plan = data.data;
+                this.summary = data.data.summary;
+            } catch (e) { showToast('加载计划失败', 'error'); }
+        },
+
+        async loadItems() {
+            this.loading = true;
+            try {
+                const resp = await fetch('/api/test-plans/' + this.planId + '/items');
+                const data = await resp.json();
+                this.items = data.data || [];
+                this.updateSummary();
+            } catch (e) { showToast('加载用例列表失败', 'error'); }
+            finally { this.loading = false; }
+        },
+
+        updateSummary() {
+            const s = { pass: 0, fail: 0, nt: 0, na: 0, untested: 0 };
+            for (const item of this.items) {
+                if (item.execution_status) s[item.execution_status]++;
+                else s.untested++;
+            }
+            this.summary = s;
+        },
+
+        filterLabel(f) {
+            return { pass: 'Pass', fail: 'Fail', nt: 'NT', na: 'NA', untested: '未测' }[f] || f;
+        },
+    }));
+});
+</script>
+{% endblock %}

@@ -1,0 +1,224 @@
+{% extends "base.html" %}
+{% block title %}逐条测试 — {{ plan.name }}{% endblock %}
+{% block header %}{% endblock %}
+{% block mobile_nav %}{% endblock %}
+{% block footer %}{% endblock %}
+
+{% block content %}
+<div x-data="execution" x-init="init({{ plan.id }})">
+    <!-- 顶部导航 -->
+    <nav style="margin-bottom: 0.5rem;">
+        <ul><li><a :href="'/app/test-plans/' + planId">&larr; 返回计划</a></li></ul>
+    </nav>
+
+    <!-- 进度条 -->
+    <div style="margin-bottom: 0.8rem;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.3rem;">
+            <small style="color: var(--pico-muted-color);" x-text="planName"></small>
+            <small style="font-weight: 600;" x-text="(currentIndex + 1) + ' / ' + items.length"></small>
+        </div>
+        <div class="progress-bar" style="height: 4px; margin: 0;">
+            <div :style="{width: ((currentIndex + 1) / items.length * 100) + '%', background: 'var(--pico-primary)', transition: 'width 0.3s'}"></div>
+        </div>
+    </div>
+
+    <template x-if="loading">
+        <p style="text-align: center; padding: 2rem;">加载中...</p>
+    </template>
+
+    <template x-if="!loading && items.length === 0">
+        <article style="text-align: center; padding: 3rem;">
+            <p style="color: var(--pico-muted-color);">该计划暂无关联用例</p>
+            <a :href="'/app/test-plans/' + planId" role="button" class="secondary">&larr; 返回计划</a>
+        </article>
+    </template>
+
+    <template x-if="!loading && items.length > 0">
+        <div>
+            <!-- 用例卡片（带滑动） -->
+            <div class="exec-card-wrapper"
+                 @touchstart="touchStart($event)"
+                 @touchend="touchEnd($event)"
+                 @mousedown="mouseStart($event)"
+                 @mouseup="mouseEnd($event)">
+                <article class="exec-card" :key="currentIndex">
+                    <p x-text="currentItem?.test_case?.title || ''" style="font-size: 0.95rem; margin-bottom: 0.6rem;"></p>
+
+                    <!-- 前置条件 -->
+                    <div x-show="currentItem?.test_case?.precondition" style="margin-bottom: 0.8rem;">
+                        <small style="color: var(--pico-muted-color);">前置条件</small>
+                        <p x-text="currentItem?.test_case?.precondition" style="margin: 0.2rem 0;"></p>
+                    </div>
+
+                    <!-- 测试步骤 -->
+                    <template x-if="currentItem?.test_case?.steps?.length">
+                        <div style="margin-bottom: 1rem;">
+                            <small style="color: var(--pico-muted-color);">测试步骤</small>
+                            <table style="margin-top: 0.3rem;">
+                                <thead><tr><th style="width: 40px;">#</th><th>操作</th><th>预期</th></tr></thead>
+                                <tbody>
+                                    <template x-for="step in currentItem?.test_case?.steps" :key="step.seq">
+                                        <tr>
+                                            <td x-text="step.seq"></td>
+                                            <td x-text="step.action"></td>
+                                            <td x-text="step.expected"></td>
+                                        </tr>
+                                    </template>
+                                </tbody>
+                            </table>
+                        </div>
+                    </template>
+                </article>
+            </div>
+
+            <!-- 执行结果按钮 -->
+            <div class="exec-actions">
+                <button class="exec-btn pass" @click="submitResult('pass')" :disabled="submitting">
+                    <span class="exec-btn-icon">✓</span> Pass
+                </button>
+                <button class="exec-btn fail" @click="submitResult('fail')" :disabled="submitting">
+                    <span class="exec-btn-icon">✗</span> Fail
+                </button>
+                <button class="exec-btn nt" @click="submitResult('nt')" :disabled="submitting">
+                    <span class="exec-btn-icon">—</span> NT
+                </button>
+                <button class="exec-btn na" @click="submitResult('na')" :disabled="submitting">
+                    <span class="exec-btn-icon">○</span> NA
+                </button>
+            </div>
+
+        </div>
+    </template>
+
+            <!-- 上一条 / 下一条 -->
+            <div class="exec-nav" x-show="items.length > 1">
+                <button class="exec-nav-btn" @click="goTo(currentIndex - 1)" :disabled="currentIndex === 0">
+                    ← 上一条
+                </button>
+                <button class="exec-nav-btn next" @click="goTo(currentIndex + 1)" :disabled="currentIndex >= items.length - 1">
+                    下一条 →
+                </button>
+            </div>
+        </div>
+    </template>
+
+    <!-- 底部占位（防止内容被手机底部栏遮挡） -->
+    <div style="height: 20px;"></div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('alpine:init', () => {
+    Alpine.data('execution', () => ({
+        planId: 0,
+        planName: '',
+        items: [],
+        currentIndex: 0,
+        loading: false,
+        submitting: false,
+        touchStartX: 0,
+        touchStartY: 0,
+        mouseStartX: 0,
+
+        get currentItem() {
+            return this.items[this.currentIndex] || null;
+        },
+
+        get allDone() {
+            return this.items.every(i => i.execution_status);
+        },
+
+        async init(planId) {
+            this.planId = planId;
+            await this.loadItems();
+            // 跳到第一条未执行的
+            const firstUntested = this.items.findIndex(i => !i.execution_status);
+            if (firstUntested >= 0) this.currentIndex = firstUntested;
+        },
+
+        async loadItems() {
+            this.loading = true;
+            try {
+                const [planResp, itemsResp] = await Promise.all([
+                    fetch('/api/test-plans/' + this.planId),
+                    fetch('/api/test-plans/' + this.planId + '/items'),
+                ]);
+                const planData = await planResp.json();
+                this.planName = planData.data?.name || '';
+                const itemsData = await itemsResp.json();
+                this.items = itemsData.data || [];
+            } catch (e) {
+                showToast('加载失败', 'error');
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        async submitResult(status) {
+            if (this.submitting) return;
+            const item = this.currentItem;
+            if (!item) return;
+
+            this.submitting = true;
+            try {
+                const resp = await fetch('/api/test-plans/' + this.planId + '/items/' + item.id, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        execution_status: status,
+                    }),
+                });
+                if (resp.ok) {
+                    item.execution_status = status;
+                    if (this.currentIndex < this.items.length - 1) {
+                        this.goTo(this.currentIndex + 1);
+                    }
+                }
+            } catch (e) {
+                showToast('保存失败', 'error');
+            } finally {
+                this.submitting = false;
+            }
+        },
+
+        goTo(index) {
+            if (index < 0 || index >= this.items.length || index === this.currentIndex) return;
+            this.currentIndex = index;
+        },
+
+        // ── 触摸滑动 ──
+        touchStart(e) {
+            this.touchStartX = e.changedTouches[0].screenX;
+            this.touchStartY = e.changedTouches[0].screenY;
+        },
+
+        touchEnd(e) {
+            const dx = e.changedTouches[0].screenX - this.touchStartX;
+            const dy = e.changedTouches[0].screenY - this.touchStartY;
+            if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 50) {
+                if (dx < 0) this.goTo(this.currentIndex + 1);
+                else this.goTo(this.currentIndex - 1);
+            }
+        },
+
+        // ── 鼠标拖拽 ──
+        mouseStart(e) {
+            this.mouseStartX = e.screenX;
+        },
+
+        mouseEnd(e) {
+            const dx = e.screenX - this.mouseStartX;
+            if (Math.abs(dx) > 80) {
+                if (dx < 0) this.goTo(this.currentIndex + 1);
+                else this.goTo(this.currentIndex - 1);
+            }
+        },
+
+        sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        },
+    }));
+});
+</script>
+{% endblock %}

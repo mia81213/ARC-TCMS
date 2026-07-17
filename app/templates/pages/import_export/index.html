@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}导出 — 测试用例管理系统{% endblock %}
+
+{% block content %}
+<div x-data="exportPage">
+    <hgroup>
+        <h1>导出</h1>
+        <p>导出用例或测试计划为 Excel 文件</p>
+    </hgroup>
+
+    <div class="grid">
+        <!-- 导出用例 -->
+        <article>
+            <header><h3>导出用例</h3></header>
+            <div class="grid">
+                <label>
+                    模块筛选
+                    <select x-model="exportModule">
+                        <option value="">全部</option>
+                        <template x-for="m in modules" :key="m">
+                            <option :value="m" x-text="m"></option>
+                        </template>
+                    </select>
+                </label>
+                <label>
+                    优先级
+                    <select x-model="exportPriority">
+                        <option value="">全部</option>
+                        <option value="P0">P0</option>
+                        <option value="P1">P1</option>
+                        <option value="P2">P2</option>
+                        <option value="P3">P3</option>
+                    </select>
+                </label>
+            </div>
+            <button @click="exportCases()" class="contrast">导出用例 Excel</button>
+        </article>
+
+        <!-- 导出计划 -->
+        <article>
+            <header><h3>导出测试计划</h3></header>
+            <label>
+                计划列表
+                <select x-model="exportPlanId">
+                    <option value="">请选择计划</option>
+                    <template x-for="p in plans" :key="p.id">
+                        <option :value="p.id" x-text="p.name + ' (' + (p.summary.pass||0) + ' Pass / ' + (p.summary.fail||0) + ' Fail)'"></option>
+                    </template>
+                </select>
+            </label>
+            <button @click="exportPlan()" :disabled="!exportPlanId">导出计划 Excel</button>
+        </article>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('alpine:init', () => {
+    Alpine.data('exportPage', () => ({
+        modules: [],
+        plans: [],
+        exportModule: '',
+        exportPriority: '',
+        exportPlanId: '',
+
+        async init() {
+            try {
+                const [modResp, planResp] = await Promise.all([
+                    fetch('/api/test-cases/modules'),
+                    fetch('/api/test-plans'),
+                ]);
+                this.modules = ((await modResp.json()).data || []);
+                this.plans = ((await planResp.json()).data || []);
+            } catch (e) {}
+        },
+
+        exportCases() {
+            const params = new URLSearchParams();
+            if (this.exportModule) params.set('module', this.exportModule);
+            if (this.exportPriority) params.set('priority', this.exportPriority);
+            window.open('/api/export/test-cases?' + params.toString(), '_blank');
+        },
+
+        exportPlan() {
+            if (!this.exportPlanId) { showToast('请选择计划', 'error'); return; }
+            window.open('/api/export/test-plan/' + this.exportPlanId, '_blank');
+        },
+    }));
+});
+</script>
+{% endblock %}

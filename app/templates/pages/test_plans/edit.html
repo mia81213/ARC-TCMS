@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}编辑计划 — 测试用例管理系统{% endblock %}
+
+{% block content %}
+<div x-data="editPlanForm">
+    <nav>
+        <ul><li><a href="/app/test-plans">&larr; 返回列表</a></li></ul>
+    </nav>
+    <h1>编辑计划</h1>
+
+    <form @submit.prevent="submitForm">
+        <label>
+            计划名称
+            <input type="text" x-model="form.name" required maxlength="255">
+        </label>
+
+        <div class="grid" style="margin-top: 2rem;">
+            <a href="/app/test-plans" role="button" class="secondary">取消</a>
+            <button type="submit" class="contrast" :disabled="saving">
+                <span x-show="!saving">保存</span>
+                <span x-show="saving">保存中...</span>
+            </button>
+        </div>
+    </form>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('alpine:init', () => {
+    Alpine.data('editPlanForm', () => ({
+        form: { name: '' },
+        saving: false,
+        planId: {{ plan.id }},
+
+        init() {
+            this.form.name = {{ plan.name | tojson }};
+        },
+
+        async submitForm() {
+            if (!this.form.name.trim()) { showToast('名称不能为空', 'error'); return; }
+            this.saving = true;
+            try {
+                const resp = await fetch('/api/test-plans/' + this.planId, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify(this.form),
+                });
+                if (resp.ok) {
+                    showToast('保存成功', 'success');
+                    setTimeout(() => { window.location.href = '/app/test-plans'; }, 500);
+                } else {
+                    const err = await resp.json();
+                    showToast('操作失败: ' + (err.detail || '未知错误'), 'error');
+                }
+            } catch (e) { showToast('操作失败: ' + e.message, 'error'); }
+            finally { this.saving = false; }
+        },
+    }));
+});
+</script>
+{% endblock %}

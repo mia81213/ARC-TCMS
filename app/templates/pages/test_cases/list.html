@@ -1,0 +1,281 @@
+{% extends "base.html" %}
+{% block title %}用例管理 — 测试用例管理系统{% endblock %}
+
+{% block content %}
+<div x-data="testCaseList">
+    <hgroup>
+        <h1>测试用例管理</h1>
+        <p>共 <strong x-text="meta.total"></strong> 条用例</p>
+    </hgroup>
+
+    <!-- 工具栏 -->
+    <div class="toolbar">
+        <input
+            type="text"
+            placeholder="搜索用例..."
+            x-model="search"
+            @input="debounceSearch"
+            class="search-input"
+            style="flex: 1; max-width: 300px;"
+        >
+        <button @click="$refs.importInput.click()" class="import-btn">
+            📥 导入
+        </button>
+        <input type="file" x-ref="importInput" @change="handleImport($event)" accept=".xlsx,.xls,.csv" style="display:none;">
+    </div>
+
+    <!-- 导入预览弹窗 -->
+    <dialog x-ref="importDialog">
+        <article>
+            <header>导入预览</header>
+            <template x-if="importPreview && importPreview.valid_rows">
+                <div>
+                    <template x-if="importPreview.errors && importPreview.errors.length > 0">
+                        <div style="margin-bottom: 0.5rem;">
+                            <template x-for="err in importPreview.errors" :key="err.row + err.field">
+                                <p style="color: var(--pico-del-color); margin: 0; font-size: 0.85rem;">
+                                    ⚠ 第<span x-text="err.row"></span>行: <span x-text="err.message"></span>
+                                </p>
+                            </template>
+                        </div>
+                    </template>
+                    <div style="max-height: 300px; overflow-y: auto;">
+                        <table>
+                            <thead><tr><th>#</th><th>标题</th><th>模块</th><th>优先级</th></tr></thead>
+                            <tbody>
+                                <template x-for="(row, idx) in importPreview.valid_rows.slice(0, 20)" :key="idx">
+                                    <tr>
+                                        <td x-text="row._row || (idx + 1)"></td>
+                                        <td x-text="row.title"></td>
+                                        <td x-text="row.module"></td>
+                                        <td x-text="row.priority"></td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                    <footer>
+                        <button class="secondary" @click="$refs.importDialog.close(); importPreview=null;">取消</button>
+                        <button class="contrast" @click="confirmImport()" :disabled="importing">
+                            <span x-show="!importing">确认导入（<span x-text="importPreview.valid_rows.length"></span> 条）</span>
+                            <span x-show="importing">导入中...</span>
+                        </button>
+                    </footer>
+                </div>
+            </template>
+        </article>
+    </dialog>
+
+    <!-- 筛选栏 -->
+    <div class="grid" style="margin-bottom: 1rem;">
+        <label>
+            模块
+            <select x-model="filterModule" @change="fetchCases()">
+                <option value="">全部</option>
+                {% for m in modules %}
+                <option value="{{ m }}">{{ m }}</option>
+                {% endfor %}
+            </select>
+        </label>
+    </div>
+
+    <!-- 用例表格 -->
+    <div class="overflow-auto">
+        <table class="striped">
+            <thead>
+                <tr>
+                    <th style="width: 70%;">用例</th>
+                    <th>操作</th>
+                </tr>
+            </thead>
+            <tbody>
+                <template x-if="loading">
+                    <tr><td colspan="2" style="text-align: center;">加载中...</td></tr>
+                </template>
+                <template x-if="!loading && cases.length === 0">
+                    <tr><td colspan="2" style="text-align: center;">暂无用例数据</td></tr>
+                </template>
+                <template x-for="c in cases" :key="c.id">
+                    <tr>
+                        <td>
+                            <span x-text="caseTitle(c.title)"></span>
+                        </td>
+                        <td style="text-align: center !important; display: table-cell;">
+                            <button class="btn-light blue" @click="viewDetail(c.id)">详情</button>
+                            <button class="btn-light" @click="window.location.href='/app/test-cases/' + c.id + '/edit'">编辑</button>
+                            <button class="btn-light gray" @click="confirmDelete(c.id, c.title)">删除</button>
+                        </td>
+                    </tr>
+                </template>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- 分页 -->
+    <div class="grid" x-show="meta.total_pages > 1">
+        <div>
+            <button @click="goPage(meta.page - 1)" :disabled="meta.page <= 1">上一页</button>
+        </div>
+        <div style="text-align: center;">
+            <span>第 <strong x-text="meta.page"></strong> / <strong x-text="meta.total_pages"></strong> 页</span>
+        </div>
+        <div style="text-align: right;">
+            <button @click="goPage(meta.page + 1)" :disabled="meta.page >= meta.total_pages">下一页</button>
+        </div>
+    </div>
+
+    <!-- 删除确认对话框 -->
+    <dialog x-ref="deleteDialog">
+        <article>
+            <header>确认删除</header>
+            <p>确定要删除用例「<strong x-text="deletingTitle"></strong>」吗？此操作不可撤销。</p>
+            <footer>
+                <button class="secondary" @click="$refs.deleteDialog.close()">取消</button>
+                <button class="contrast" @click="doDelete()">确认删除</button>
+            </footer>
+        </article>
+    </dialog>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('alpine:init', () => {
+    Alpine.data('testCaseList', () => ({
+        cases: [],
+        meta: { page: 1, per_page: 20, total: 0, total_pages: 1 },
+        search: '',
+        filterModule: '',
+        filterPriority: '',
+        filterStatus: '',
+        loading: false,
+        deletingId: null,
+        deletingTitle: '',
+        searchTimer: null,
+        importPreview: null,
+        importing: false,
+
+        async init() {
+            await this.fetchCases();
+        },
+
+        async handleImport(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const formData = new FormData();
+            formData.append('file', file);
+            try {
+                const resp = await fetch('/api/import/preview', { method: 'POST', body: formData });
+                this.importPreview = await resp.json();
+                if (this.importPreview.valid_rows?.length > 0) {
+                    this.$refs.importDialog.showModal();
+                } else {
+                    showToast('文件中没有有效数据', 'error');
+                }
+            } catch (e) { showToast('文件解析失败', 'error'); }
+            event.target.value = '';
+        },
+
+        async confirmImport() {
+            if (!this.importPreview?.valid_rows) return;
+            this.importing = true;
+            try {
+                const rows = this.importPreview.valid_rows.map(({_row, ...rest}) => rest);
+                const resp = await fetch('/api/import/confirm', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ rows }),
+                });
+                const result = await resp.json();
+                showToast(result.message, 'success');
+                this.$refs.importDialog.close();
+                this.importPreview = null;
+                await this.fetchCases();
+            } catch (e) { showToast('导入失败', 'error'); }
+            finally { this.importing = false; }
+        },
+
+        async fetchCases() {
+            this.loading = true;
+            const params = new URLSearchParams({
+                page: this.meta.page,
+                per_page: this.meta.per_page,
+            });
+            if (this.search) params.set('search', this.search);
+            if (this.filterModule) params.set('module', this.filterModule);
+            if (this.filterPriority) params.set('priority', this.filterPriority);
+            if (this.filterStatus) params.set('status', this.filterStatus);
+
+            try {
+                const resp = await fetch('/api/test-cases?' + params.toString());
+                const data = await resp.json();
+                this.cases = data.data || [];
+                this.meta = data.meta || { page: 1, per_page: 20, total: 0, total_pages: 1 };
+            } catch (e) {
+                console.error('加载用例失败:', e);
+                showToast('加载用例失败', 'error');
+            } finally {
+                this.loading = false;
+            }
+        },
+
+        debounceSearch() {
+            clearTimeout(this.searchTimer);
+            this.searchTimer = setTimeout(() => {
+                this.meta.page = 1;
+                this.fetchCases();
+            }, 300);
+        },
+
+        goPage(page) {
+            if (page < 1 || page > this.meta.total_pages) return;
+            this.meta.page = page;
+            this.fetchCases();
+            window.scrollTo({ top: 0, behavior: 'smooth' });
+        },
+
+        confirmDelete(id, title) {
+            this.deletingId = id;
+            this.deletingTitle = title;
+            this.$refs.deleteDialog.showModal();
+        },
+
+        async doDelete() {
+            try {
+                const resp = await fetch('/api/test-cases/' + this.deletingId, { method: 'DELETE' });
+                if (resp.ok) {
+                    showToast('删除成功', 'success');
+                    this.$refs.deleteDialog.close();
+                    await this.fetchCases();
+                } else {
+                    showToast('删除失败', 'error');
+                }
+            } catch (e) {
+                showToast('删除失败: ' + e.message, 'error');
+            }
+        },
+
+        statusLabel(s) {
+            const map = { draft: '草稿', active: '启用', deprecated: '废弃' };
+            return map[s] || s;
+        },
+
+        caseNo(title) {
+            const m = title.match(/\[([^\]]+)\]/);
+            return m ? m[1] : '';
+        },
+        caseTitle(title) {
+            return title.replace(/^\[[^\]]+\]\s*/, '');
+        },
+        viewDetail(id) {
+            window.location.href = '/app/test-cases/' + id;
+        },
+
+        formatDate(d) {
+            if (!d) return '';
+            return new Date(d).toLocaleString('zh-CN');
+        },
+    }));
+});
+</script>
+{% endblock %}
