@@ -24,7 +24,7 @@
                 <li><a href="/app/test-cases">用例管理</a></li>
                 <li><a href="/app/test-cases?type=check">点检</a></li>
                 <li><a href="/app/test-plans">测试计划</a></li>
-                <li><a href="/app/import-export">导入导出</a></li>
+                <li><a href="/app/import-export">导入数据</a></li>
             </ul>
         </nav>
     </header>
@@ -65,7 +65,7 @@
         </a>
         <a href="/app/import-export" class="{% if '/import-export' in request.url.path %}active{% endif %}">
             <span class="nav-icon">📤</span>
-            <span class="nav-label">导出</span>
+            <span class="nav-label">数据</span>
         </a>
     </nav>
     {% endblock %}
