@@ -178,6 +178,8 @@ document.addEventListener('alpine:init', () => {
         importing: false,
 
         async init() {
+            const urlType = new URLSearchParams(window.location.search).get('type');
+            if (urlType === 'check') this.caseType = 'check';
             await this.fetchCases();
         },
 

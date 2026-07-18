@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+{% block title %}注册 — TCMS{% endblock %}
+
+{% block content %}
+<div x-data="registerForm" style="max-width: 400px; margin: 3rem auto;">
+    <hgroup style="text-align: center;">
+        <h1>注册</h1>
+        <p>创建你的 TCMS 账号</p>
+    </hgroup>
+
+    <article>
+        <form @submit.prevent="submitRegister()">
+            <label>
+                用户名
+                <input type="text" x-model="form.username" required placeholder="2-64个字符" autocomplete="username">
+            </label>
+            <label>
+                密码
+                <input type="password" x-model="form.password" required placeholder="至少4个字符" autocomplete="new-password">
+            </label>
+            <label>
+                确认密码
+                <input type="password" x-model="form.confirm" required placeholder="再次输入密码">
+            </label>
+            <p x-show="error" style="color: var(--pico-del-color); font-size: 0.85rem;" x-text="error"></p>
+            <button type="submit" class="contrast" style="width: 100%;" :disabled="loading">
+                <span x-show="!loading">注册</span>
+                <span x-show="loading">注册中...</span>
+            </button>
+        </form>
+        <footer style="text-align: center; margin-top: 1rem;">
+            <small>已有账号？<a href="/app/login">登录</a></small>
+        </footer>
+    </article>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('alpine:init', () => {
+    Alpine.data('registerForm', () => ({
+        form: { username: '', password: '', confirm: '' },
+        loading: false,
+        error: '',
+
+        async submitRegister() {
+            if (this.form.password !== this.form.confirm) {
+                this.error = '两次密码不一致'; return;
+            }
+            if (this.form.password.length < 4) {
+                this.error = '密码至少4个字符'; return;
+            }
+            this.loading = true; this.error = '';
+            try {
+                const resp = await fetch('/api/auth/register', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username: this.form.username, password: this.form.password }),
+                });
+                if (resp.ok) {
+                    const data = await resp.json();
+                    localStorage.setItem('tcms_token', data.data.token);
+                    localStorage.setItem('tcms_user', JSON.stringify(data.data));
+                    window.location.href = '/app/';
+                } else {
+                    const err = await resp.json();
+                    this.error = err.detail || '注册失败';
+                }
+            } catch (e) { this.error = '网络错误'; }
+            finally { this.loading = false; }
+        },
+    }));
+});
+</script>
+{% endblock %}

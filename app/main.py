@@ -10,7 +10,7 @@ from fastapi.staticfiles import StaticFiles
 from app.config import settings
 from app.database import init_db
 from app.templates import templates
-from app.routers import test_cases, test_plans, test_plan_items, import_export
+from app.routers import test_cases, test_plans, test_plan_items, import_export, auth
 
 
 @asynccontextmanager
@@ -61,6 +61,8 @@ app.include_router(test_plans.page_router)
 app.include_router(test_plan_items.router)
 app.include_router(import_export.router)
 app.include_router(import_export.page_router)
+app.include_router(auth.router)
+app.include_router(auth.page_router)
 
 
 # ── 首页仪表盘 ──

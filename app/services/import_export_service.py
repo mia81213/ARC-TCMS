@@ -271,13 +271,12 @@ def _parse_test_file(df, errors) -> dict:
 
 
 def _parse_check_file(df, errors) -> dict:
-    """解析检查用例文件"""
-    # 检查用例的列结构：序号 | 类别 | 检查项目 | 评价标准 | 频次 | 测试结果
+    """解析检查用例文件
+    格式：序号 | 类别 | 检查项目 | 评价标准 | 频次 | 测试结果
+    """
     valid_rows = []
-    all_text = "\n".join([str(v) for v in df.values.flatten() if pd.notna(v)])
-    current_category = ""
+    last_category = ""
 
-    seq = 0
     for idx in range(df.shape[0]):
         row = df.iloc[idx]
         vals = [str(v).strip() for v in row.tolist() if pd.notna(v) and str(v).strip() != "nan"]
@@ -285,47 +284,50 @@ def _parse_check_file(df, errors) -> dict:
         if len(vals) < 2:
             continue
 
-        # 跳过表头行
-        if any(kw in " ".join(vals) for kw in ["检查项目", "评价标准", "测试结果", "车辆信息", "VIN"]):
+        # 跳过表头/说明行
+        combined = " ".join(vals)
+        if any(kw in combined for kw in ["检查项目", "评价标准", "评价标準", "测试结果", "Test Result", "车型", "车辆信息", "VIN", "Pass", "Fail", "NT", "NA"]):
             continue
 
-        # 第一列可能是序号或类别名称
-        first = vals[0]
+        first = vals[0] if len(vals) > 0 else ""
         second = vals[1] if len(vals) > 1 else ""
         third = vals[2] if len(vals) > 2 else ""
         fourth = vals[3] if len(vals) > 3 else ""
-        fifth = vals[4] if len(vals) > 4 else ""
 
-        # 判断是类别标题还是检查项
-        if first.isdigit() or (first.replace(".", "").isdigit() and len(vals) >= 3):
-            # 是检查项：序号 | 检查项目 | 评价标准
-            seq = int(float(first)) if first.replace(".", "").isdigit() else seq + 1
-            if not all_text.split("\n")[0]:  # No specific category set yet
-                pass
+        # 判断是否有效行：第一列应是序号（数字）
+        is_number = first.replace(".", "").replace("-", "").isdigit()
+        if not is_number:
+            continue
 
-            # 查找真正的内容
-            item_name = second if second and not second.isdigit() else third
-            criteria = third if second and not second.isdigit() else fourth if len(vals) > 3 else ""
-
-            if not item_name or item_name.isdigit():
-                continue
-
-            valid_rows.append({
-                "title": item_name,
-                "module": current_category or "检查",
-                "check_category": current_category or "检查",
-                "check_criteria": criteria,
-                "priority": "P2",
-                "status": "active",
-                "case_type": "check",
-                "precondition": "",
-                "steps": [],
-                "tags": [],
-                "_row": int(idx) + 1,
-            })
+        # 类别：如果second非空且不是纯数字，则作为类别；否则继承上一行
+        if second and not second.isdigit():
+            category = second
+            last_category = category
         else:
-            # 可能是类别标题
-            if first and not first.isdigit() and len(vals) <= 3:
-                current_category = first
+            category = last_category
+
+        # 检查项目和评价标准位置可能因合并单元格而偏移
+        item_name = third
+        criteria = fourth
+
+        if not item_name:
+            item_name = second  # 可能second就是检查项（无类别列时）
+
+        if not item_name or item_name.isdigit():
+            continue
+
+        valid_rows.append({
+            "title": item_name,
+            "module": f"点检 - {category}" if category else "点检",
+            "check_category": category or "检查",
+            "check_criteria": criteria,
+            "priority": "P2",
+            "status": "active",
+            "case_type": "check",
+            "precondition": "",
+            "steps": [],
+            "tags": [],
+            "_row": int(idx) + 1,
+        })
 
     return {"file_type": "check", "valid_rows": valid_rows, "errors": errors}

@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block title %}登录 — TCMS{% endblock %}
+
+{% block content %}
+<div x-data="loginForm" style="max-width: 400px; margin: 3rem auto;">
+    <hgroup style="text-align: center;">
+        <h1>TCMS</h1>
+        <p>测试用例管理系统</p>
+    </hgroup>
+
+    <article>
+        <form @submit.prevent="submitLogin()">
+            <label>
+                用户名
+                <input type="text" x-model="form.username" required placeholder="请输入用户名" autocomplete="username">
+            </label>
+            <label>
+                密码
+                <input type="password" x-model="form.password" required placeholder="请输入密码" autocomplete="current-password">
+            </label>
+            <p x-show="error" style="color: var(--pico-del-color); font-size: 0.85rem;" x-text="error"></p>
+            <button type="submit" class="contrast" style="width: 100%;" :disabled="loading">
+                <span x-show="!loading">登录</span>
+                <span x-show="loading">登录中...</span>
+            </button>
+        </form>
+        <footer style="text-align: center; margin-top: 1rem;">
+            <small>还没有账号？<a href="/app/register">注册</a></small>
+        </footer>
+    </article>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('alpine:init', () => {
+    Alpine.data('loginForm', () => ({
+        form: { username: '', password: '' },
+        loading: false,
+        error: '',
+
+        async submitLogin() {
+            if (!this.form.username || !this.form.password) {
+                this.error = '请填写用户名和密码'; return;
+            }
+            this.loading = true; this.error = '';
+            try {
+                const resp = await fetch('/api/auth/login', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(this.form),
+                });
+                if (resp.ok) {
+                    const data = await resp.json();
+                    localStorage.setItem('tcms_token', data.data.token);
+                    localStorage.setItem('tcms_user', JSON.stringify(data.data));
+                    window.location.href = '/app/';
+                } else {
+                    const err = await resp.json();
+                    this.error = err.detail || '登录失败';
+                }
+            } catch (e) { this.error = '网络错误'; }
+            finally { this.loading = false; }
+        },
+    }));
+});
+</script>
+{% endblock %}

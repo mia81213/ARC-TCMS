@@ -3,7 +3,7 @@
 import enum
 from datetime import datetime
 
-from sqlalchemy import DateTime, Enum, Integer, String, Text, func
+from sqlalchemy import DateTime, Enum, ForeignKey, Integer, String, Text, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database import Base
@@ -23,6 +23,9 @@ class TestPlan(Base):
     __tablename__ = "test_plans"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id"), nullable=True, index=True, comment="所属用户"
+    )
     name: Mapped[str] = mapped_column(String(255), nullable=False, comment="计划名称")
     description: Mapped[str | None] = mapped_column(Text, nullable=True, comment="描述")
     status: Mapped[PlanStatusEnum] = mapped_column(
