@@ -9,11 +9,12 @@ from app.models.test_plan_item import TestPlanItem, ExecutionStatusEnum
 from app.schemas.test_plan import TestPlanCreate, TestPlanUpdate
 
 
-async def list_test_plans(db: AsyncSession) -> list[TestPlan]:
+async def list_test_plans(db: AsyncSession, user_id: int | None = None) -> list[TestPlan]:
     """获取所有测试计划"""
-    result = await db.execute(
-        select(TestPlan).options(selectinload(TestPlan.items)).order_by(TestPlan.updated_at.desc())
-    )
+    query = select(TestPlan).options(selectinload(TestPlan.items)).order_by(TestPlan.updated_at.desc())
+    if user_id is not None:
+        query = query.where(TestPlan.user_id == user_id)
+    result = await db.execute(query)
     return list(result.scalars().all())
 
 
@@ -38,9 +39,10 @@ async def get_test_plan(db: AsyncSession, plan_id: int) -> TestPlan | None:
     return result.scalar_one_or_none()
 
 
-async def create_test_plan(db: AsyncSession, data: TestPlanCreate) -> TestPlan:
+async def create_test_plan(db: AsyncSession, data: TestPlanCreate, user_id: int | None = None) -> TestPlan:
     """创建计划"""
     plan = TestPlan(
+        user_id=user_id,
         name=data.name,
         description=data.description,
         status=PlanStatusEnum(data.status.value),

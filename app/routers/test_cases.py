@@ -7,6 +7,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.auth import get_optional_user
+from app.models.user import User
 from app.templates import templates
 from app.schemas.test_case import (
     TestCaseCreate, TestCaseUpdate, TestCaseResponse, TestCaseListParams, PaginatedResponse,
@@ -24,9 +26,10 @@ async def list_test_cases_api(
     request: Request,
     params: TestCaseListParams = Depends(),
     db: AsyncSession = Depends(get_db),
+    user: User | None = Depends(get_optional_user),
 ):
     """获取用例列表（JSON API）"""
-    cases, total = await service.list_test_cases(db, params)
+    cases, total = await service.list_test_cases(db, params, user_id=user.id if user else None)
     total_pages = max(1, math.ceil(total / params.per_page))
     return PaginatedResponse(
         data=[TestCaseResponse.model_validate(c) for c in cases],
@@ -63,9 +66,13 @@ async def get_test_case_api(case_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("", response_model=TestCaseResponse, status_code=201)
-async def create_test_case_api(data: TestCaseCreate, db: AsyncSession = Depends(get_db)):
+async def create_test_case_api(
+    data: TestCaseCreate,
+    db: AsyncSession = Depends(get_db),
+    user: User | None = Depends(get_optional_user),
+):
     """创建用例"""
-    case = await service.create_test_case(db, data)
+    case = await service.create_test_case(db, data, user_id=user.id if user else None)
     await db.commit()
     return TestCaseResponse.model_validate(case)
 

@@ -5,6 +5,8 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.auth import get_optional_user
+from app.models.user import User
 from app.templates import templates
 from app.schemas.test_plan import TestPlanCreate, TestPlanUpdate, TestPlanResponse
 from app.services import test_plan_service as service
@@ -16,9 +18,12 @@ page_router = APIRouter(prefix="/app/test-plans", tags=["pages-test-plans"])
 # ═══════════════════════ API 端点 ═══════════════════════
 
 @router.get("")
-async def list_test_plans_api(db: AsyncSession = Depends(get_db)):
+async def list_test_plans_api(
+    db: AsyncSession = Depends(get_db),
+    user: User | None = Depends(get_optional_user),
+):
     """获取计划列表"""
-    plans = await service.list_test_plans(db)
+    plans = await service.list_test_plans(db, user_id=user.id if user else None)
     data = []
     for p in plans:
         summary = service.compute_summary(p.items)
@@ -40,9 +45,13 @@ async def get_test_plan_api(plan_id: int, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("", status_code=201)
-async def create_test_plan_api(data: TestPlanCreate, db: AsyncSession = Depends(get_db)):
+async def create_test_plan_api(
+    data: TestPlanCreate,
+    db: AsyncSession = Depends(get_db),
+    user: User | None = Depends(get_optional_user),
+):
     """创建计划"""
-    plan = await service.create_test_plan(db, data)
+    plan = await service.create_test_plan(db, data, user_id=user.id if user else None)
     await db.commit()
     return {"data": TestPlanResponse.model_validate(plan).model_dump()}
 

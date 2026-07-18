@@ -77,6 +77,29 @@
     {% endblock %}
 
     <script>
+    // ── 认证检查 ──
+    (function() {
+        const publicPages = ['/app/login', '/app/register', '/api/auth/login', '/api/auth/register'];
+        const currentPath = window.location.pathname;
+
+        // 不检查公开页面
+        if (publicPages.includes(currentPath)) return;
+
+        const token = localStorage.getItem('tcms_token');
+        if (!token) {
+            window.location.href = '/app/login';
+            return;
+        }
+
+        // 全局 fetch 拦截：自动附加 token
+        const origFetch = window.fetch;
+        window.fetch = function(url, options = {}) {
+            options.headers = options.headers || {};
+            options.headers['Authorization'] = 'Bearer ' + token;
+            return origFetch.call(this, url, options);
+        };
+    })();
+
     // Toast 通知组件
     document.addEventListener('alpine:init', () => {
         Alpine.data('toast', () => ({

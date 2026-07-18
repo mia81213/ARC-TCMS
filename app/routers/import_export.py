@@ -5,6 +5,8 @@ from fastapi.responses import HTMLResponse, StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
+from app.auth import get_optional_user
+from app.models.user import User
 from app.templates import templates
 from app.services import import_export_service as service
 from app.models.test_case import TestCase, PriorityEnum, CaseStatusEnum
@@ -65,7 +67,11 @@ async def preview_import(file: UploadFile = File(...)):
 
 
 @router.post("/import/confirm")
-async def confirm_import(data: dict, db: AsyncSession = Depends(get_db)):
+async def confirm_import(
+    data: dict,
+    db: AsyncSession = Depends(get_db),
+    user: User | None = Depends(get_optional_user),
+):
     """确认导入：将预览数据写入数据库"""
     rows = data.get("rows", [])
     if not rows:
@@ -73,9 +79,11 @@ async def confirm_import(data: dict, db: AsyncSession = Depends(get_db)):
 
     created = 0
     errors = []
+    user_id = user.id if user else None
     for i, row in enumerate(rows):
         try:
             case = TestCase(
+                user_id=user_id,
                 title=row["title"],
                 module=row.get("module", "默认模块"),
                 priority=PriorityEnum(row.get("priority", "P2")),

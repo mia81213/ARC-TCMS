@@ -20,10 +20,14 @@ def _to_orm_status(s: CaseStatusEnum) -> OrmStatus:
     return OrmStatus(s.value)
 
 
-async def list_test_cases(db: AsyncSession, params: TestCaseListParams) -> tuple[list[TestCase], int]:
+async def list_test_cases(db: AsyncSession, params: TestCaseListParams, user_id: int | None = None) -> tuple[list[TestCase], int]:
     """列表查询，返回 (用例列表, 总数)"""
     query = select(TestCase)
     count_query = select(func.count(TestCase.id))
+
+    if user_id is not None:
+        query = query.where((TestCase.user_id == user_id) | (TestCase.user_id.is_(None)))
+        count_query = count_query.where((TestCase.user_id == user_id) | (TestCase.user_id.is_(None)))
 
     # 类型筛选
     if params.case_type:
@@ -70,9 +74,10 @@ async def get_test_case(db: AsyncSession, case_id: int) -> TestCase | None:
     return result.scalar_one_or_none()
 
 
-async def create_test_case(db: AsyncSession, data: TestCaseCreate) -> TestCase:
+async def create_test_case(db: AsyncSession, data: TestCaseCreate, user_id: int | None = None) -> TestCase:
     """创建用例"""
     case = TestCase(
+        user_id=user_id,
         title=data.title,
         module=data.module,
         priority=_to_orm_priority(data.priority),
