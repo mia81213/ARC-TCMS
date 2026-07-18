@@ -4,9 +4,15 @@
 {% block content %}
 <div x-data="testCaseList">
     <hgroup>
-        <h1>用例管理</h1>
-        <p>共 <strong x-text="meta.total"></strong> 条用例</p>
+        <h1 x-text="caseType === 'check' ? '点检' : '用例管理'">用例管理</h1>
+        <p>共 <strong x-text="meta.total"></strong> 条</p>
     </hgroup>
+
+    <!-- 类型切换 -->
+    <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
+        <button :class="caseType === 'test' ? 'contrast' : 'secondary'" @click="switchType('test')">测试用例</button>
+        <button :class="caseType === 'check' ? 'contrast' : 'secondary'" @click="switchType('check')">点检</button>
+    </div>
 
     <!-- 工具栏 -->
     <div class="toolbar">
@@ -83,24 +89,41 @@
     <div class="overflow-auto">
         <table class="striped">
             <thead>
-                <tr>
-                    <th style="width: 70%;">用例</th>
+                <tr x-show="caseType === 'test'">
+                    <th>用例</th>
+                    <th>操作</th>
+                </tr>
+                <tr x-show="caseType === 'check'">
+                    <th>检查项目</th>
+                    <th>模块</th>
                     <th>操作</th>
                 </tr>
             </thead>
             <tbody>
                 <template x-if="loading">
-                    <tr><td colspan="2" style="text-align: center;">加载中...</td></tr>
+                    <tr><td :colspan="caseType === 'check' ? 3 : 2" style="text-align: center;">加载中...</td></tr>
                 </template>
                 <template x-if="!loading && cases.length === 0">
-                    <tr><td colspan="2" style="text-align: center;">暂无用例数据</td></tr>
+                    <tr><td :colspan="caseType === 'check' ? 3 : 2" style="text-align: center;">暂无数据</td></tr>
                 </template>
-                <template x-for="c in cases" :key="c.id">
+                <!-- 测试用例 -->
+                <template x-for="c in cases" :key="c.id" x-show="caseType === 'test'">
                     <tr>
                         <td><span x-text="caseTitle(c.title)"></span></td>
                         <td style="text-align: center !important; display: table-cell;">
                             <button class="btn-light blue" @click="viewDetail(c.id)">详情</button>
                             <button class="btn-light" @click="window.location.href='/app/test-cases/' + c.id + '/edit'">编辑</button>
+                            <button class="btn-light gray" @click="confirmDelete(c.id, c.title)">删除</button>
+                        </td>
+                    </tr>
+                </template>
+                <!-- 点检用例 -->
+                <template x-for="c in cases" :key="c.id" x-show="caseType === 'check'">
+                    <tr>
+                        <td><span x-text="c.title"></span></td>
+                        <td><kbd x-text="c.module"></kbd></td>
+                        <td style="text-align: center !important; display: table-cell;">
+                            <button class="btn-light blue" @click="viewDetail(c.id)">详情</button>
                             <button class="btn-light gray" @click="confirmDelete(c.id, c.title)">删除</button>
                         </td>
                     </tr>
@@ -144,8 +167,7 @@ document.addEventListener('alpine:init', () => {
         meta: { page: 1, per_page: 20, total: 0, total_pages: 1 },
         search: '',
         filterModule: '',
-        filterPriority: '',
-        filterStatus: '',
+        caseType: 'test',
         loading: false,
         deletingId: null,
         deletingTitle: '',
@@ -154,7 +176,15 @@ document.addEventListener('alpine:init', () => {
         importing: false,
 
         async init() {
+            const urlType = new URLSearchParams(window.location.search).get('type');
+            if (urlType === 'check') this.caseType = 'check';
             await this.fetchCases();
+        },
+
+        switchType(type) {
+            this.caseType = type;
+            this.meta.page = 1;
+            this.fetchCases();
         },
 
         async handleImport(event) {
@@ -199,10 +229,9 @@ document.addEventListener('alpine:init', () => {
                 page: this.meta.page,
                 per_page: this.meta.per_page,
             });
+            params.set('case_type', this.caseType);
             if (this.search) params.set('search', this.search);
             if (this.filterModule) params.set('module', this.filterModule);
-            if (this.filterPriority) params.set('priority', this.filterPriority);
-            if (this.filterStatus) params.set('status', this.filterStatus);
 
             try {
                 const resp = await fetch('/api/test-cases?' + params.toString());

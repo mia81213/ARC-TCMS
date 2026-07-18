@@ -335,7 +335,7 @@ def _parse_check_dataframe(df, errors, sheet_name: str) -> dict:
 
         valid_rows.append({
             "title": item_name,
-            "module": f"{sheet_module} - {category}" if category else sheet_module,
+            "module": sheet_module,
             "check_category": category or "检查",
             "check_criteria": criteria,
             "priority": "P2",
