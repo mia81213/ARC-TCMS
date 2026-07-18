@@ -6,8 +6,12 @@
     <!-- 统计卡片 -->
     <div class="dash-stats">
         <div class="dash-stat">
-            <span class="dash-stat-num" x-text="stats.totalCases" style="color: #FF6B6B;">-</span>
+            <span class="dash-stat-num" x-text="stats.testCases" style="color: #FF6B6B;">-</span>
             <span class="dash-stat-label">测试用例</span>
+        </div>
+        <div class="dash-stat">
+            <span class="dash-stat-num" x-text="stats.checkCases" style="color: #4DABF7;">-</span>
+            <span class="dash-stat-label">点检用例</span>
         </div>
         <div class="dash-stat">
             <span class="dash-stat-num" x-text="stats.totalPlans" style="color: #FF8C42;">-</span>
@@ -16,10 +20,6 @@
         <div class="dash-stat">
             <span class="dash-stat-num" x-text="stats.activePlans" style="color: #51CF66;">-</span>
             <span class="dash-stat-label">进行中</span>
-        </div>
-        <div class="dash-stat">
-            <span class="dash-stat-num" x-text="stats.totalExecuted" style="color: #4DABF7;">-</span>
-            <span class="dash-stat-label">已执行</span>
         </div>
     </div>
 
@@ -67,30 +67,27 @@
 <script>
 document.addEventListener('alpine:init', () => {
     Alpine.data('dashboard', () => ({
-        stats: { totalCases: 0, totalPlans: 0, activePlans: 0, totalExecuted: 0 },
+        stats: { testCases: 0, checkCases: 0, totalPlans: 0, activePlans: 0 },
         activePlans: [],
 
         async load() {
             try {
-                const [caseResp, planResp] = await Promise.all([
-                    fetch('/api/test-cases?per_page=1'),
+                const [testResp, checkResp, planResp] = await Promise.all([
+                    fetch('/api/test-cases?per_page=1&case_type=test'),
+                    fetch('/api/test-cases?per_page=1&case_type=check'),
                     fetch('/api/test-plans'),
                 ]);
-                const cases = await caseResp.json();
+                this.stats.testCases = (await testResp.json()).meta?.total || 0;
+                this.stats.checkCases = (await checkResp.json()).meta?.total || 0;
                 const plans = await planResp.json();
-
-                this.stats.totalCases = cases.meta?.total || 0;
                 this.stats.totalPlans = (plans.data || []).length;
 
-                let activeCount = 0, totalExec = 0;
+                let activeCount = 0;
                 const active = [];
                 for (const p of (plans.data || [])) {
                     if (p.status === 'in_progress') { activeCount++; active.push(p); }
-                    const s = p.summary || {};
-                    totalExec += (s.pass || 0) + (s.fail || 0) + (s.nt || 0) + (s.na || 0);
                 }
                 this.stats.activePlans = activeCount;
-                this.stats.totalExecuted = totalExec;
                 this.activePlans = active.slice(0, 10);
             } catch (e) { console.error(e); }
         },

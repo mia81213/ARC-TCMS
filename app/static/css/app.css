@@ -152,6 +152,14 @@ header.container-fluid { background: rgba(255, 255, 255, 0.8) !important; backdr
 .result-chip.nt { background: #F5F0F0; color: #999; }
 .result-chip.na { background: #FFF8EB; color: #F0A020; }
 .result-chip.untested { background: #F0F0F0; color: #888; }
+.result-chip-outline {
+    display: inline-flex; align-items: center; gap: 0.15rem;
+    padding: 0.2rem 0.5rem; border-radius: 12px;
+    font-size: 0.7rem; text-decoration: none; font-weight: 500;
+    background: transparent; border: 1.5px solid #E0D0D0; color: #999;
+    cursor: pointer; transition: all 0.15s;
+}
+.result-chip-outline:hover { border-color: #aaa; color: #666; }
 
 /* ── 开始测试按钮 ── */
 .btn-start-test {

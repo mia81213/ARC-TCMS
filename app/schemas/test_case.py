@@ -38,6 +38,7 @@ class TestCaseBase(BaseModel):
     tags: list[str] = Field(default_factory=list, description="标签")
     check_category: str | None = Field(None, description="检查类别")
     check_criteria: str | None = Field(None, description="评价标准")
+    check_result: str | None = Field(None, description="检查结果: pass/fail/nt/na")
 
 
 class TestCaseCreate(TestCaseBase):
@@ -57,6 +58,7 @@ class TestCaseUpdate(BaseModel):
     case_type: str | None = None
     check_category: str | None = None
     check_criteria: str | None = None
+    check_result: str | None = None
 
 
 class TestCaseResponse(TestCaseBase):
