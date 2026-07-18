@@ -1,17 +1,63 @@
 {% extends "base.html" %}
-{% block title %}导出 — 测试用例管理系统{% endblock %}
+{% block title %}导入导出 — TCMS{% endblock %}
 
 {% block content %}
-<div x-data="exportPage">
+<div x-data="importExport">
     <hgroup>
-        <h1>导出</h1>
-        <p>导出用例或测试计划为 Excel 文件</p>
+        <h1>导入 / 导出</h1>
     </hgroup>
 
     <div class="grid">
+        <!-- 导入用例 -->
+        <article>
+            <header><h3>导入测试用例</h3></header>
+            <label>
+                选择文件（.xlsx / .csv）
+                <input type="file" @change="handleFile($event)" accept=".xlsx,.xls,.csv">
+            </label>
+            <p style="color: var(--pico-muted-color); font-size: 0.85em;">
+                支持列名：标题/title、模块/module、优先级/priority、前置条件/precondition、步骤/steps、标签/tags
+            </p>
+
+            <!-- 预览 -->
+            <template x-if="preview && preview.valid_rows">
+                <div>
+                    <h4>预览（<span x-text="preview.valid_rows.length"></span> 条）</h4>
+                    <template x-if="preview.errors && preview.errors.length > 0">
+                        <div style="margin-bottom: 0.5rem;">
+                            <template x-for="err in preview.errors" :key="err.row + err.field">
+                                <p style="color: var(--pico-del-color); margin: 0; font-size: 0.85rem;">
+                                    ⚠ 第<span x-text="err.row"></span>行: <span x-text="err.message"></span>
+                                </p>
+                            </template>
+                        </div>
+                    </template>
+                    <div style="max-height: 300px; overflow-y: auto;">
+                        <table>
+                            <thead><tr><th>#</th><th>标题</th><th>模块</th><th>优先级</th></tr></thead>
+                            <tbody>
+                                <template x-for="(row, idx) in preview.valid_rows.slice(0, 20)" :key="idx">
+                                    <tr>
+                                        <td x-text="row._row || (idx + 1)"></td>
+                                        <td x-text="row.title"></td>
+                                        <td x-text="row.module"></td>
+                                        <td x-text="row.priority"></td>
+                                    </tr>
+                                </template>
+                            </tbody>
+                        </table>
+                    </div>
+                    <button @click="confirmImport()" class="contrast" style="margin-top: 1rem;" :disabled="importing">
+                        <span x-show="!importing">确认导入（<span x-text="preview.valid_rows.length"></span> 条）</span>
+                        <span x-show="importing">导入中...</span>
+                    </button>
+                </div>
+            </template>
+        </article>
+
         <!-- 导出用例 -->
         <article>
-            <header><h3>导出用例</h3></header>
+            <header><h3>导出测试用例</h3></header>
             <div class="grid">
                 <label>
                     模块筛选
@@ -33,14 +79,10 @@
                     </select>
                 </label>
             </div>
-            <button @click="exportCases()" class="contrast">导出用例 Excel</button>
-        </article>
-
-        <!-- 导出计划 -->
-        <article>
-            <header><h3>导出测试计划</h3></header>
+            <button @click="exportCases()">导出用例 Excel</button>
+            <hr>
             <label>
-                计划列表
+                导出测试计划
                 <select x-model="exportPlanId">
                     <option value="">请选择计划</option>
                     <template x-for="p in plans" :key="p.id">
@@ -57,12 +99,14 @@
 {% block scripts %}
 <script>
 document.addEventListener('alpine:init', () => {
-    Alpine.data('exportPage', () => ({
+    Alpine.data('importExport', () => ({
         modules: [],
         plans: [],
         exportModule: '',
         exportPriority: '',
         exportPlanId: '',
+        preview: null,
+        importing: false,
 
         async init() {
             try {
@@ -85,6 +129,34 @@ document.addEventListener('alpine:init', () => {
         exportPlan() {
             if (!this.exportPlanId) { showToast('请选择计划', 'error'); return; }
             window.open('/api/export/test-plan/' + this.exportPlanId, '_blank');
+        },
+
+        async handleFile(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+            const formData = new FormData();
+            formData.append('file', file);
+            try {
+                const resp = await fetch('/api/import/preview', { method: 'POST', body: formData });
+                this.preview = await resp.json();
+            } catch (e) { showToast('文件解析失败', 'error'); }
+        },
+
+        async confirmImport() {
+            if (!this.preview?.valid_rows) return;
+            this.importing = true;
+            try {
+                const rows = this.preview.valid_rows.map(({_row, ...rest}) => rest);
+                const resp = await fetch('/api/import/confirm', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ rows }),
+                });
+                const result = await resp.json();
+                showToast(result.message, 'success');
+                this.preview = null;
+            } catch (e) { showToast('导入失败', 'error'); }
+            finally { this.importing = false; }
         },
     }));
 });
