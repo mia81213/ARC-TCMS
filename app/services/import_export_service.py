@@ -310,6 +310,7 @@ def _parse_check_dataframe(df, errors, sheet_name: str) -> dict:
         second = vals[1] if len(vals) > 1 else ""
         third = vals[2] if len(vals) > 2 else ""
         fourth = vals[3] if len(vals) > 3 else ""
+        fifth = vals[4] if len(vals) > 4 else ""
 
         # 判断是否有效行：第一列应是序号（数字）
         is_number = first.replace(".", "").replace("-", "").isdigit()
@@ -338,7 +339,7 @@ def _parse_check_dataframe(df, errors, sheet_name: str) -> dict:
             "module": sheet_module,
             "check_category": category or "检查",
             "check_criteria": criteria,
-            "check_frequency": fifth if fifth and not fifth.isdigit() is False else fifth,
+            "check_frequency": fifth if fifth and not fifth.startswith("测试") else "",
             "priority": "P2",
             "status": "active",
             "case_type": "check",
