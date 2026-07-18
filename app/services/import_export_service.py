@@ -188,27 +188,41 @@ async def parse_import_file(file: UploadFile) -> dict:
     try:
         if file.filename and file.filename.lower().endswith(".csv"):
             df = pd.read_csv(io.BytesIO(content))
+            if df.empty:
+                return {"valid_rows": [], "errors": [{"row": 0, "field": "file", "message": "文件中没有数据"}]}
+            all_text = " ".join([str(v) for v in df.values.flatten() if pd.notna(v)])
+            is_check = "检查项目" in all_text or "评价标准" in all_text
+            if is_check:
+                return _parse_check_dataframe(df, errors, "")
+            else:
+                df.columns = [str(c).strip() for c in df.iloc[0].tolist()]
+                df = df.iloc[1:]
+                return _parse_test_dataframe(df, errors)
         else:
-            df = pd.read_excel(io.BytesIO(content), header=None)
+            xls = pd.ExcelFile(io.BytesIO(content))
+            all_valid = []
+            all_errors = []
+            for sheet_name in xls.sheet_names:
+                df = pd.read_excel(xls, sheet_name=sheet_name, header=None)
+                if df.empty:
+                    continue
+                all_text = " ".join([str(v) for v in df.values.flatten() if pd.notna(v)])
+                is_check = "检查项目" in all_text or "评价标准" in all_text
+                if is_check:
+                    result = _parse_check_dataframe(df, errors, sheet_name)
+                    all_valid.extend(result["valid_rows"])
+                    all_errors.extend(result.get("errors", []))
+                else:
+                    df.columns = [str(c).strip() for c in df.iloc[0].tolist()]
+                    df = df.iloc[1:]
+                    result = _parse_test_dataframe(df, errors)
+                    all_valid.extend(result["valid_rows"])
+            return {"file_type": "check" if is_check else "test", "valid_rows": all_valid, "errors": all_errors}
     except Exception as e:
         return {"valid_rows": [], "errors": [{"row": 0, "field": "file", "message": f"文件解析失败: {str(e)}"}]}
 
-    if df.empty:
-        return {"valid_rows": [], "errors": [{"row": 0, "field": "file", "message": "文件中没有数据"}]}
 
-    # 判断文件类型：检查是否有"检查项目"列
-    columns = [str(c).strip() for c in df.iloc[0].tolist()]
-    all_text = " ".join([str(v) for v in df.values.flatten() if pd.notna(v)])
-
-    is_check = "检查项目" in all_text or "评价标准" in all_text or "评价标準" in all_text
-
-    if is_check:
-        return _parse_check_file(df, errors)
-    else:
-        return _parse_test_file(df, errors)
-
-
-def _parse_test_file(df, errors) -> dict:
+def _parse_test_dataframe(df, errors) -> dict:
     """解析测试用例文件"""
     df.columns = [str(c).strip() for c in df.iloc[0].tolist()]
     df = df.iloc[1:]  # 去掉标题行
@@ -270,12 +284,15 @@ def _parse_test_file(df, errors) -> dict:
     return {"file_type": "test", "valid_rows": valid_rows, "errors": errors}
 
 
-def _parse_check_file(df, errors) -> dict:
-    """解析检查用例文件
+def _parse_check_dataframe(df, errors, sheet_name: str) -> dict:
+    """解析检查用例DataFrame
     格式：序号 | 类别 | 检查项目 | 评价标准 | 频次 | 测试结果
+    sheet_name: Sheet 名称，用作模块名
     """
     valid_rows = []
     last_category = ""
+    # 用 sheet 名作为顶层模块
+    sheet_module = sheet_name.strip() if sheet_name else "点检"
 
     for idx in range(df.shape[0]):
         row = df.iloc[idx]
@@ -318,7 +335,7 @@ def _parse_check_file(df, errors) -> dict:
 
         valid_rows.append({
             "title": item_name,
-            "module": f"点检 - {category}" if category else "点检",
+            "module": f"{sheet_module} - {category}" if category else sheet_module,
             "check_category": category or "检查",
             "check_criteria": criteria,
             "priority": "P2",
