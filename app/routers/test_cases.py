@@ -4,10 +4,12 @@ import math
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse, RedirectResponse
+from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db
 from app.auth import get_optional_user
+from app.models.test_case import TestCase
 from app.models.user import User
 from app.templates import templates
 from app.schemas.test_case import (
@@ -95,6 +97,24 @@ async def delete_test_case_api(case_id: int, db: AsyncSession = Depends(get_db))
         raise HTTPException(status_code=404, detail="用例不存在")
     await db.commit()
     return {"data": None, "message": "删除成功"}
+
+
+@router.post("/batch-delete")
+async def batch_delete_api(
+    data: dict, db: AsyncSession = Depends(get_db),
+    user: User | None = Depends(get_optional_user),
+):
+    """批量删除指定类型的用例"""
+    case_type = data.get("case_type", "")
+    if not case_type:
+        raise HTTPException(status_code=400, detail="请指定 case_type")
+
+    stmt = delete(TestCase).where(TestCase.case_type == case_type)
+    if user:
+        stmt = stmt.where(TestCase.user_id == user.id)
+    result = await db.execute(stmt)
+    await db.commit()
+    return {"data": None, "message": f"已删除 {result.rowcount} 条用例"}
 
 
 # ═══════════════════════ 页面路由 ═══════════════════════
