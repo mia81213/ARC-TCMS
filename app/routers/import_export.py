@@ -80,9 +80,12 @@ async def confirm_import(data: dict, db: AsyncSession = Depends(get_db)):
                 module=row.get("module", "默认模块"),
                 priority=PriorityEnum(row.get("priority", "P2")),
                 status=CaseStatusEnum.ACTIVE,
+                case_type=row.get("case_type", "test"),
                 precondition=row.get("precondition", ""),
                 steps=row.get("steps", []),
                 tags=row.get("tags", []),
+                check_category=row.get("check_category"),
+                check_criteria=row.get("check_criteria"),
             )
             db.add(case)
             created += 1

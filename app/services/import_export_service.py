@@ -150,14 +150,22 @@ async def export_test_plan_to_excel(db: AsyncSession, plan_id: int) -> io.BytesI
 
 # ── 导入 ──
 
-# 预期的列名映射（支持中英文）
-COLUMN_MAP = {
+# 测试用例列名映射
+TEST_COLUMN_MAP = {
     "title": ["title", "标题", "用例标题", "名称"],
     "module": ["module", "模块", "所属模块"],
-    "priority": ["priority", "优先级", "P0", "P1", "P2", "P3"],
+    "priority": ["priority", "优先级"],
     "precondition": ["precondition", "前置条件", "前提条件"],
     "steps": ["steps", "步骤", "测试步骤"],
     "tags": ["tags", "标签"],
+}
+
+# 检查用例列名映射
+CHECK_COLUMN_MAP = {
+    "title": ["检查项目", "项目"],
+    "module": ["类别", "分类"],
+    "check_criteria": ["评价标准", "评价标準", "标准"],
+    "check_category": ["类别", "分类"],
 }
 
 
@@ -172,7 +180,7 @@ def _find_column(cols: list[str], candidates: list[str]) -> str | None:
 
 
 async def parse_import_file(file: UploadFile) -> dict:
-    """解析上传的文件，返回预览数据"""
+    """解析上传的文件，自动识别类型，返回预览数据"""
     content = await file.read()
     errors = []
     valid_rows = []
@@ -181,32 +189,46 @@ async def parse_import_file(file: UploadFile) -> dict:
         if file.filename and file.filename.lower().endswith(".csv"):
             df = pd.read_csv(io.BytesIO(content))
         else:
-            df = pd.read_excel(io.BytesIO(content))
+            df = pd.read_excel(io.BytesIO(content), header=None)
     except Exception as e:
         return {"valid_rows": [], "errors": [{"row": 0, "field": "file", "message": f"文件解析失败: {str(e)}"}]}
 
     if df.empty:
         return {"valid_rows": [], "errors": [{"row": 0, "field": "file", "message": "文件中没有数据"}]}
 
-    # 映射列
+    # 判断文件类型：检查是否有"检查项目"列
+    columns = [str(c).strip() for c in df.iloc[0].tolist()]
+    all_text = " ".join([str(v) for v in df.values.flatten() if pd.notna(v)])
+
+    is_check = "检查项目" in all_text or "评价标准" in all_text or "评价标準" in all_text
+
+    if is_check:
+        return _parse_check_file(df, errors)
+    else:
+        return _parse_test_file(df, errors)
+
+
+def _parse_test_file(df, errors) -> dict:
+    """解析测试用例文件"""
+    df.columns = [str(c).strip() for c in df.iloc[0].tolist()]
+    df = df.iloc[1:]  # 去掉标题行
+
     columns = list(df.columns)
     mapping = {}
-    for field, candidates in COLUMN_MAP.items():
+    for field, candidates in TEST_COLUMN_MAP.items():
         col = _find_column(columns, candidates)
         if col:
             mapping[col] = field
 
-    # 检查必要列
     if "title" not in mapping.values():
-        return {"valid_rows": [], "errors": [{"row": 0, "field": "title", "message": "找不到标题列，请确保包含「标题」或「title」列"}]}
+        return {"file_type": "test", "valid_rows": [], "errors": [{"row": 0, "field": "title", "message": "找不到标题/名称列"}]}
 
     inv_mapping = {v: k for k, v in mapping.items()}
+    valid_rows = []
 
     for idx, row in df.iterrows():
-        row_errors = []
         title = str(row.get(inv_mapping.get("title", ""), "")).strip()
         if not title or title == "nan":
-            row_errors.append({"row": int(idx) + 2, "field": "title", "message": "标题不能为空"})
             continue
 
         module = str(row.get(inv_mapping.get("module", ""), "")).strip()
@@ -216,8 +238,6 @@ async def parse_import_file(file: UploadFile) -> dict:
         priority_raw = str(row.get(inv_mapping.get("priority", ""), "P2")).strip().upper()
         if priority_raw not in ("P0", "P1", "P2", "P3"):
             priority_raw = "P2"
-            if any(k in inv_mapping for k in ["priority"]):
-                row_errors.append({"row": int(idx) + 2, "field": "priority", "message": f"优先级 '{priority_raw}' 不合法，使用默认值 P2"})
 
         precondition = str(row.get(inv_mapping.get("precondition", ""), ""))
         if precondition == "nan":
@@ -243,12 +263,69 @@ async def parse_import_file(file: UploadFile) -> dict:
             "precondition": precondition,
             "steps": steps,
             "tags": tags,
-            "_row": int(idx) + 2,
-            "_errors": row_errors,
+            "case_type": "test",
+            "_row": int(idx) + 3,
         })
 
-    all_errors = []
-    for row in valid_rows:
-        all_errors.extend(row.pop("_errors", []))
+    return {"file_type": "test", "valid_rows": valid_rows, "errors": errors}
 
-    return {"valid_rows": valid_rows, "errors": all_errors}
+
+def _parse_check_file(df, errors) -> dict:
+    """解析检查用例文件"""
+    # 检查用例的列结构：序号 | 类别 | 检查项目 | 评价标准 | 频次 | 测试结果
+    valid_rows = []
+    all_text = "\n".join([str(v) for v in df.values.flatten() if pd.notna(v)])
+    current_category = ""
+
+    seq = 0
+    for idx in range(df.shape[0]):
+        row = df.iloc[idx]
+        vals = [str(v).strip() for v in row.tolist() if pd.notna(v) and str(v).strip() != "nan"]
+
+        if len(vals) < 2:
+            continue
+
+        # 跳过表头行
+        if any(kw in " ".join(vals) for kw in ["检查项目", "评价标准", "测试结果", "车辆信息", "VIN"]):
+            continue
+
+        # 第一列可能是序号或类别名称
+        first = vals[0]
+        second = vals[1] if len(vals) > 1 else ""
+        third = vals[2] if len(vals) > 2 else ""
+        fourth = vals[3] if len(vals) > 3 else ""
+        fifth = vals[4] if len(vals) > 4 else ""
+
+        # 判断是类别标题还是检查项
+        if first.isdigit() or (first.replace(".", "").isdigit() and len(vals) >= 3):
+            # 是检查项：序号 | 检查项目 | 评价标准
+            seq = int(float(first)) if first.replace(".", "").isdigit() else seq + 1
+            if not all_text.split("\n")[0]:  # No specific category set yet
+                pass
+
+            # 查找真正的内容
+            item_name = second if second and not second.isdigit() else third
+            criteria = third if second and not second.isdigit() else fourth if len(vals) > 3 else ""
+
+            if not item_name or item_name.isdigit():
+                continue
+
+            valid_rows.append({
+                "title": item_name,
+                "module": current_category or "检查",
+                "check_category": current_category or "检查",
+                "check_criteria": criteria,
+                "priority": "P2",
+                "status": "active",
+                "case_type": "check",
+                "precondition": "",
+                "steps": [],
+                "tags": [],
+                "_row": int(idx) + 1,
+            })
+        else:
+            # 可能是类别标题
+            if first and not first.isdigit() and len(vals) <= 3:
+                current_category = first
+
+    return {"file_type": "check", "valid_rows": valid_rows, "errors": errors}

@@ -38,9 +38,15 @@ class TestCase(Base):
     status: Mapped[CaseStatusEnum] = mapped_column(
         Enum(CaseStatusEnum), nullable=False, default=CaseStatusEnum.DRAFT, comment="状态"
     )
+    case_type: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="test", index=True, comment="用例类型: test=测试用例, check=检查用例"
+    )
     precondition: Mapped[str | None] = mapped_column(Text, nullable=True, comment="前置条件")
     steps: Mapped[list] = mapped_column(JSON, nullable=False, default=list, comment="测试步骤")
     tags: Mapped[list | None] = mapped_column(JSON, nullable=True, default=list, comment="标签")
+    # 检查用例专用字段
+    check_category: Mapped[str | None] = mapped_column(String(128), nullable=True, comment="检查类别")
+    check_criteria: Mapped[str | None] = mapped_column(Text, nullable=True, comment="评价标准")
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.now(), comment="创建时间"
     )

@@ -25,6 +25,11 @@ async def list_test_cases(db: AsyncSession, params: TestCaseListParams) -> tuple
     query = select(TestCase)
     count_query = select(func.count(TestCase.id))
 
+    # 类型筛选
+    if params.case_type:
+        query = query.where(TestCase.case_type == params.case_type)
+        count_query = count_query.where(TestCase.case_type == params.case_type)
+
     # 搜索
     if params.search:
         like = f"%{params.search}%"

@@ -32,9 +32,12 @@ class TestCaseBase(BaseModel):
     module: str = Field(..., min_length=1, max_length=128, description="所属模块")
     priority: PriorityEnum = Field(default=PriorityEnum.P2, description="优先级")
     status: CaseStatusEnum = Field(default=CaseStatusEnum.DRAFT, description="状态")
+    case_type: str = Field(default="test", description="用例类型: test / check")
     precondition: str = Field(default="", description="前置条件")
     steps: list[TestStep] = Field(default_factory=list, description="测试步骤")
     tags: list[str] = Field(default_factory=list, description="标签")
+    check_category: str | None = Field(None, description="检查类别")
+    check_criteria: str | None = Field(None, description="评价标准")
 
 
 class TestCaseCreate(TestCaseBase):
@@ -51,6 +54,9 @@ class TestCaseUpdate(BaseModel):
     precondition: str | None = None
     steps: list[TestStep] | None = None
     tags: list[str] | None = None
+    case_type: str | None = None
+    check_category: str | None = None
+    check_criteria: str | None = None
 
 
 class TestCaseResponse(TestCaseBase):
@@ -70,6 +76,7 @@ class TestCaseListParams(BaseModel):
     module: str | None = Field(None, description="模块筛选")
     priority: PriorityEnum | None = Field(None, description="优先级筛选")
     status: CaseStatusEnum | None = Field(None, description="状态筛选")
+    case_type: str | None = Field(None, description="用例类型筛选")
 
 
 class PaginatedResponse(BaseModel):
