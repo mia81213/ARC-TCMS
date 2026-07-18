@@ -68,17 +68,6 @@
                 </select>
             </label>
             <button @click="exportCases()">导出用例 Excel</button>
-            <hr>
-            <label>
-                导出测试计划
-                <select x-model="exportPlanId">
-                    <option value="">请选择计划</option>
-                    <template x-for="p in plans" :key="p.id">
-                        <option :value="p.id" x-text="p.name + ' (' + (p.summary.pass||0) + ' Pass / ' + (p.summary.fail||0) + ' Fail)'"></option>
-                    </template>
-                </select>
-            </label>
-            <button @click="exportPlan()" :disabled="!exportPlanId">导出计划 Excel</button>
         </article>
     </div>
 </div>
