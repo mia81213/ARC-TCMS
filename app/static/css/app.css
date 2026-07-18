@@ -318,6 +318,11 @@ header.container-fluid { background: rgba(255, 255, 255, 0.8) !important; backdr
 .exec-btn.fail { background: #FF6B6B; }
 .exec-btn.nt { background: #A0A0A0; }
 .exec-btn.na { background: #F0A020; }
+.exec-btn.outline { background: transparent !important; color: #999; border: 2px solid #e0e0e0; }
+.exec-btn.outline.pass { color: #51CF66; border-color: #51CF66; }
+.exec-btn.outline.fail { color: #FF6B6B; border-color: #FF6B6B; }
+.exec-btn.outline.nt { color: #A0A0A0; border-color: #A0A0A0; }
+.exec-btn.outline.na { color: #F0A020; border-color: #F0A020; }
 .exec-btn:disabled { opacity: 0.4; }
 .exec-btn:not(:disabled):hover { transform: translateY(-2px); opacity: 0.9; }
 .exec-nav { display: flex; justify-content: space-between; gap: 1rem; }
