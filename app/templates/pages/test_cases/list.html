@@ -67,14 +67,30 @@
     </dialog>
 
     <!-- 筛选栏 -->
-    <div class="grid" style="margin-bottom: 1rem;">
+    <div class="grid" style="margin-bottom: 1rem;" x-show="caseType === 'check'">
         <label>
             模块
             <select x-model="filterModule" @change="fetchCases()">
                 <option value="">全部</option>
-                {% for m in modules %}
-                <option value="{{ m }}">{{ m }}</option>
-                {% endfor %}
+                <template x-for="m in allModules" :key="m">
+                    <option :value="m" x-text="m"></option>
+                </template>
+            </select>
+        </label>
+        <div style="display: flex; align-items: flex-end;">
+            <button class="contrast" @click="startCheck()" :disabled="!filterModule || cases.length === 0">
+                ▶ 开始点检
+            </button>
+        </div>
+    </div>
+    <div class="grid" style="margin-bottom: 1rem;" x-show="caseType === 'test'">
+        <label>
+            模块
+            <select x-model="filterModule" @change="fetchCases()">
+                <option value="">全部</option>
+                <template x-for="m in allModules" :key="m">
+                    <option :value="m" x-text="m"></option>
+                </template>
             </select>
         </label>
     </div>
@@ -160,6 +176,40 @@
             </footer>
         </article>
     </dialog>
+
+    <!-- 点检执行弹窗 -->
+    <dialog x-ref="checkDialog" style="max-width: 90vw; width: 600px;">
+        <article>
+            <template x-if="checkItem">
+                <div>
+                    <header style="display: flex; justify-content: space-between; align-items: center;">
+                        <span><span x-text="checkIdx + 1"></span> / <span x-text="checkItems.length"></span></span>
+                        <button class="secondary small" @click="$refs.checkDialog.close()">退出</button>
+                    </header>
+                    <div style="margin: 1rem 0; padding: 1rem; background: #FFF8F5; border-radius: 12px;">
+                        <div style="margin-bottom: 0.5rem;">
+                            <kbd x-text="checkItem.check_category || ''"></kbd>
+                            <kbd x-text="checkItem.module" style="margin-left: 4px;"></kbd>
+                        </div>
+                        <h3 x-text="checkItem.title" style="margin: 0.5rem 0;"></h3>
+                        <p style="color: var(--pico-muted-color); font-size: 0.9rem;" x-text="checkItem.check_criteria || ''"></p>
+                    </div>
+                    <!-- 结果按钮 -->
+                    <div class="exec-actions" style="margin-bottom: 1rem;">
+                        <button :class="'exec-btn pass' + (checkItem.check_result === 'pass' ? '' : ' outline')" @click="setCheckResultInline('pass')">✓ Pass</button>
+                        <button :class="'exec-btn fail' + (checkItem.check_result === 'fail' ? '' : ' outline')" @click="setCheckResultInline('fail')">✗ Fail</button>
+                        <button :class="'exec-btn nt' + (checkItem.check_result === 'nt' ? '' : ' outline')" @click="setCheckResultInline('nt')">— NT</button>
+                        <button :class="'exec-btn na' + (checkItem.check_result === 'na' ? '' : ' outline')" @click="setCheckResultInline('na')">○ NA</button>
+                    </div>
+                    <!-- 导航 -->
+                    <div class="exec-nav">
+                        <button class="exec-nav-btn" @click="checkPrev()" :disabled="checkIdx === 0">← 上一条</button>
+                        <button class="exec-nav-btn next" @click="checkNext()" :disabled="checkIdx >= checkItems.length - 1">下一条 →</button>
+                    </div>
+                </div>
+            </template>
+        </article>
+    </dialog>
 </div>
 {% endblock %}
 
@@ -182,6 +232,11 @@ document.addEventListener('alpine:init', () => {
         async init() {
             const urlType = new URLSearchParams(window.location.search).get('type');
             if (urlType === 'check') this.caseType = 'check';
+            // 加载模块列表
+            try {
+                const resp = await fetch('/api/test-cases/modules');
+                this.allModules = (await resp.json()).data || [];
+            } catch (e) {}
             await this.fetchCases();
         },
 
@@ -313,6 +368,53 @@ document.addEventListener('alpine:init', () => {
                     body: JSON.stringify({ check_result: caseItem.check_result }),
                 });
             } catch (e) { showToast('保存失败', 'error'); }
+        },
+
+        // ── 点检执行 ──
+        allModules: [],
+        checkItems: [],
+        checkItem: null,
+        checkIdx: 0,
+
+        async startCheck() {
+            // 获取当前模块的所有用例
+            const params = new URLSearchParams({ case_type: 'check', per_page: 500 });
+            if (this.filterModule) params.set('module', this.filterModule);
+            const resp = await fetch('/api/test-cases?' + params.toString());
+            const data = await resp.json();
+            this.checkItems = data.data || [];
+            this.checkIdx = 0;
+            this.checkItem = this.checkItems[0] || null;
+            if (this.checkItem) this.$refs.checkDialog.showModal();
+        },
+
+        checkPrev() {
+            if (this.checkIdx > 0) {
+                this.checkIdx--;
+                this.checkItem = this.checkItems[this.checkIdx];
+            }
+        },
+
+        checkNext() {
+            if (this.checkIdx < this.checkItems.length - 1) {
+                this.checkIdx++;
+                this.checkItem = this.checkItems[this.checkIdx];
+            }
+        },
+
+        async setCheckResultInline(result) {
+            if (!this.checkItem) return;
+            const id = this.checkItem.id;
+            const val = this.checkItem.check_result === result ? null : result;
+            this.checkItem.check_result = val;
+            // 也更新 cases 列表中对应项
+            const caseItem = this.cases.find(c => c.id === id);
+            if (caseItem) caseItem.check_result = val;
+            await fetch('/api/test-cases/' + id, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ check_result: val }),
+            });
         },
 
         formatDate(d) {
