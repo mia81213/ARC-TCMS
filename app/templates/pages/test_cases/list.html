@@ -8,12 +8,6 @@
         <p>共 <strong x-text="meta.total"></strong> 条</p>
     </hgroup>
 
-    <!-- 类型切换 -->
-    <div style="display: flex; gap: 0.5rem; margin-bottom: 1rem;">
-        <button :class="caseType === 'test' ? 'contrast' : 'secondary'" @click="switchType('test')">测试用例</button>
-        <button :class="caseType === 'check' ? 'contrast' : 'secondary'" @click="switchType('check')">点检</button>
-    </div>
-
     <!-- 工具栏 -->
     <div class="toolbar">
         <input
@@ -24,7 +18,7 @@
             class="search-input"
             style="flex: 1; max-width: 300px;"
         >
-        <button @click="$refs.importInput.click()" class="import-btn">
+        <button @click="$refs.importInput.click()" class="import-btn" x-show="caseType !== 'check'">
             📥 导入
         </button>
         <input type="file" x-ref="importInput" @change="handleImport($event)" accept=".xlsx,.xls,.csv" style="display:none;">
