@@ -22,7 +22,6 @@
             <ul class="desktop-nav">
                 <li><a href="/app/">首页</a></li>
                 <li><a href="/app/test-cases">用例管理</a></li>
-                <li><a href="/app/test-cases?type=check">点检</a></li>
                 <li><a href="/app/test-plans">测试计划</a></li>
                 <li><a href="/app/import-export">导入数据</a></li>
             </ul>
@@ -54,10 +53,6 @@
         <a href="/app/test-cases" class="{% if '/test-cases' in request.url.path %}active{% endif %}">
             <span class="nav-icon">📋</span>
             <span class="nav-label">用例</span>
-        </a>
-        <a href="/app/test-cases?type=check">
-            <span class="nav-icon">🔍</span>
-            <span class="nav-label">点检</span>
         </a>
         <a href="/app/test-plans" class="{% if '/test-plans' in request.url.path %}active{% endif %}">
             <span class="nav-icon">📝</span>
