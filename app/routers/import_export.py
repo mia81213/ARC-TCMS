@@ -94,6 +94,7 @@ async def confirm_import(
                 tags=row.get("tags", []),
                 check_category=row.get("check_category"),
                 check_criteria=row.get("check_criteria"),
+                check_frequency=row.get("check_frequency"),
             )
             db.add(case)
             created += 1

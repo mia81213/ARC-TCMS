@@ -7,4 +7,8 @@ services:
     startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
     envVars:
       - key: DATABASE_URL
-        value: sqlite+aiosqlite:///tcms.db
+        value: sqlite+aiosqlite:///data/tcms.db
+    disk:
+      name: tcms-data
+      mountPath: /data
+      sizeGB: 1

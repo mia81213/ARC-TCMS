@@ -39,6 +39,7 @@ class TestCaseBase(BaseModel):
     check_category: str | None = Field(None, description="检查类别")
     check_criteria: str | None = Field(None, description="评价标准")
     check_result: str | None = Field(None, description="检查结果: pass/fail/nt/na")
+    check_frequency: str | None = Field(None, description="频次")
 
 
 class TestCaseCreate(TestCaseBase):
@@ -59,6 +60,7 @@ class TestCaseUpdate(BaseModel):
     check_category: str | None = None
     check_criteria: str | None = None
     check_result: str | None = None
+    check_frequency: str | None = None
 
 
 class TestCaseResponse(TestCaseBase):
@@ -73,7 +75,7 @@ class TestCaseResponse(TestCaseBase):
 class TestCaseListParams(BaseModel):
     """用例列表查询参数"""
     page: int = Field(default=1, ge=1, description="页码")
-    per_page: int = Field(default=20, ge=1, le=100, description="每页数量")
+    per_page: int = Field(default=20, ge=1, le=1000, description="每页数量")
     search: str | None = Field(None, description="搜索关键词（标题）")
     module: str | None = Field(None, description="模块筛选")
     priority: PriorityEnum | None = Field(None, description="优先级筛选")

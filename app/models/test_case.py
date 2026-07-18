@@ -51,6 +51,7 @@ class TestCase(Base):
     check_category: Mapped[str | None] = mapped_column(String(128), nullable=True, comment="检查类别")
     check_criteria: Mapped[str | None] = mapped_column(Text, nullable=True, comment="评价标准")
     check_result: Mapped[str | None] = mapped_column(String(16), nullable=True, comment="检查结果: pass/fail/nt/na")
+    check_frequency: Mapped[str | None] = mapped_column(String(32), nullable=True, comment="频次")
     created_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, server_default=func.now(), comment="创建时间"
     )

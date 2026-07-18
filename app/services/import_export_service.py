@@ -338,6 +338,7 @@ def _parse_check_dataframe(df, errors, sheet_name: str) -> dict:
             "module": sheet_module,
             "check_category": category or "检查",
             "check_criteria": criteria,
+            "check_frequency": fifth if fifth and not fifth.isdigit() is False else fifth,
             "priority": "P2",
             "status": "active",
             "case_type": "check",

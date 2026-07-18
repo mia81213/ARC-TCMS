@@ -108,16 +108,17 @@
                     <th>类别</th>
                     <th>检查项目</th>
                     <th>评价标准</th>
+                    <th>频次</th>
                     <th>测试结果</th>
                     <th>操作</th>
                 </tr>
             </thead>
             <tbody>
                 <template x-if="loading">
-                    <tr><td :colspan="caseType === 'check' ? 6 : 2" style="text-align: center;">加载中...</td></tr>
+                    <tr><td :colspan="caseType === 'check' ? 7 : 2" style="text-align: center;">加载中...</td></tr>
                 </template>
                 <template x-if="!loading && cases.length === 0">
-                    <tr><td :colspan="caseType === 'check' ? 6 : 2" style="text-align: center;">暂无数据</td></tr>
+                    <tr><td :colspan="caseType === 'check' ? 7 : 2" style="text-align: center;">暂无数据</td></tr>
                 </template>
                 <!-- 测试用例 -->
                 <template x-for="c in cases" :key="c.id" x-show="caseType === 'test'">
@@ -137,6 +138,7 @@
                         <td><kbd x-text="c.check_category || c.module"></kbd></td>
                         <td><span x-text="c.title" style="font-size: 0.85rem;"></span></td>
                         <td><small x-text="c.check_criteria || ''" style="color: var(--pico-muted-color);"></small></td>
+                        <td x-text="c.check_frequency || '1'"></td>
                         <td style="text-align: center; white-space: nowrap;">
                             <button :class="c.check_result === 'pass' ? 'result-chip pass' : 'result-chip-outline'" @click="setCheckResult(c.id, 'pass')">Pass</button>
                             <button :class="c.check_result === 'fail' ? 'result-chip fail' : 'result-chip-outline'" @click="setCheckResult(c.id, 'fail')">Fail</button>
